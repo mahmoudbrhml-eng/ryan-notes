@@ -1,18 +1,17 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import FileUploader from '@/components/FileUploader'
+import AppShell from '@/components/AppShell'
 import ConfirmButton from '@/components/ConfirmButton'
+import FileUploader from '@/components/FileUploader'
+import Icon from '@/components/Icon'
+import { getI18n } from '@/lib/i18n'
+import { fmtSize } from '@/lib/format'
+import { createClient } from '@/lib/supabase/server'
 import { deleteFile } from './actions'
-
-function fmtSize(n: number | null) {
-  if (!n) return ''
-  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
 
 export default async function SubjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const { t } = await getI18n()
   const supabase = await createClient()
 
   const { data: subject } = await supabase
@@ -36,59 +35,78 @@ export default async function SubjectPage({ params }: { params: Promise<{ id: st
   const urls = new Map<string, string>()
   const paths = (files ?? []).map((f) => f.storage_path)
   if (paths.length > 0) {
-    const { data: signed } = await supabase.storage
-      .from('lecture-files')
-      .createSignedUrls(paths, 3600)
+    const { data: signed } = await supabase.storage.from('lecture-files').createSignedUrls(paths, 3600)
     signed?.forEach((s) => {
       if (s.path && s.signedUrl) urls.set(s.path, s.signedUrl)
     })
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <Link href="/subjects" className="text-sm text-slate-400 hover:text-teal-400">
-        ← موادي
-      </Link>
-      <h1 className="mt-4 mb-8 text-2xl font-bold text-teal-400">{subject.name}</h1>
+    <AppShell
+      crumb={
+        <>
+          <Link href="/subjects" className="hover:text-teal-300">{t.back}</Link>
+          {' / '}
+          <span dir="auto" className="text-teal-300">{subject.name}</span>
+        </>
+      }
+    >
+      <section className="flex flex-wrap items-start gap-5">
+        <aside className="glass flex min-w-[290px] flex-[1_1_320px] flex-col gap-4">
+          <h2 className="text-xl font-semibold">{t.files}</h2>
+          <FileUploader
+            userId={userId}
+            subjectId={subject.id}
+            labels={{ drop: t.drop, dropHint: t.dropHint, uploading: t.uploading, tooBig: t.tooBig }}
+          />
+          {files?.length === 0 && <p className="muted text-sm">{t.noFiles}</p>}
+          <ul>
+            {files?.map((f) => (
+              <li key={f.id} className="flex items-center gap-3 border-b border-white/10 py-3 last:border-0">
+                <span className="tile h-10 w-10 bg-teal-400/15 text-teal-300">
+                  <Icon name="file" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={urls.get(f.storage_path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    dir="auto"
+                    className="block truncate font-medium hover:text-teal-300"
+                  >
+                    {f.name}
+                  </a>
+                  <span dir="ltr" className="muted text-xs">{fmtSize(f.size_bytes)}</span>
+                </div>
+                <form action={deleteFile}>
+                  <input type="hidden" name="id" value={f.id} />
+                  <input type="hidden" name="subjectId" value={subject.id} />
+                  <ConfirmButton
+                    message={t.confirmDeleteFile.replace('{name}', f.name)}
+                    className="btn btn-ghost btn-sm !text-red-400"
+                  >
+                    <Icon name="trash" className="h-4 w-4" />
+                    <span className="sr-only">{t.del}</span>
+                  </ConfirmButton>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </aside>
 
-      <h2 className="mb-3 text-lg font-semibold">الملفات</h2>
-      <FileUploader userId={userId} subjectId={subject.id} />
-
-      {files?.length === 0 && (
-        <p className="mt-6 text-slate-400">لسه مفيش ملفات في المادة دي.</p>
-      )}
-
-      <ul className="mt-6 space-y-2">
-        {files?.map((f) => (
-          <li
-            key={f.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 p-3"
-          >
-            <div className="min-w-0 flex-1">
-              <a
-                href={urls.get(f.storage_path)}
-                target="_blank"
-                rel="noreferrer"
-                dir="auto"
-                className="block truncate font-medium hover:text-teal-400"
-              >
-                {f.name}
-              </a>
-              <span className="text-xs text-slate-500">{fmtSize(f.size_bytes)}</span>
-            </div>
-            <form action={deleteFile}>
-              <input type="hidden" name="id" value={f.id} />
-              <input type="hidden" name="subjectId" value={subject.id} />
-              <ConfirmButton
-                message={`مسح "${f.name}"؟`}
-                className="text-sm text-slate-500 hover:text-red-400"
-              >
-                مسح
-              </ConfirmButton>
-            </form>
-          </li>
-        ))}
-      </ul>
-    </main>
+        <div className="flex min-w-[300px] flex-[2_1_520px] flex-col gap-4">
+          <div className="flex flex-wrap gap-1" aria-hidden="true">
+            {[t.tabs.transcript, t.tabs.summary, t.tabs.quiz, t.tabs.focus].map((x) => (
+              <span key={x} className="tab opacity-50">{x}</span>
+            ))}
+          </div>
+          <div className="glass flex flex-col items-start gap-3">
+            <span className="chip">{t.soon}</span>
+            <h2 className="text-xl font-semibold">{t.outputs}</h2>
+            <p className="muted leading-7">{t.outputsSoon}</p>
+          </div>
+        </div>
+      </section>
+    </AppShell>
   )
 }

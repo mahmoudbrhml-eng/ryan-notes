@@ -1,64 +1,116 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import AppShell from '@/components/AppShell'
 import ConfirmButton from '@/components/ConfirmButton'
-import { createSubject, deleteSubject, signOut } from './actions'
+import Icon from '@/components/Icon'
+import { getI18n } from '@/lib/i18n'
+import { fmtSize } from '@/lib/format'
+import { createClient } from '@/lib/supabase/server'
+import { createSubject, deleteSubject } from './actions'
 
 export default async function SubjectsPage() {
+  const { t } = await getI18n()
   const supabase = await createClient()
+
   const { data: subjects, error } = await supabase
     .from('subjects')
     .select('id, name, created_at')
     .order('created_at', { ascending: false })
+  const { data: fileRows } = await supabase.from('files').select('subject_id, size_bytes')
+
+  const counts = new Map<string, number>()
+  let bytes = 0
+  fileRows?.forEach((f) => {
+    counts.set(f.subject_id, (counts.get(f.subject_id) ?? 0) + 1)
+    bytes += f.size_bytes ?? 0
+  })
+
+  const stats = [
+    { label: t.stats.subjects, value: String(subjects?.length ?? 0), icon: 'cap' as const, c: 'bg-violet-500/20' },
+    { label: t.stats.files, value: String(fileRows?.length ?? 0), icon: 'file' as const, c: 'bg-teal-400/20' },
+    { label: t.stats.storage, value: fmtSize(bytes), icon: 'clock' as const, c: 'bg-blue-500/25' },
+  ]
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-teal-400">موادي</h1>
-        <form action={signOut}>
-          <button className="text-sm text-slate-400 hover:text-white">تسجيل خروج</button>
-        </form>
-      </header>
+    <AppShell crumb={t.nav.home}>
+      <div>
+        <h1 className="text-3xl font-bold md:text-4xl">{t.welcome}</h1>
+        <p className="muted mt-2 text-lg">{t.welcomeSub}</p>
+      </div>
 
-      <form action={createSubject} className="mb-8 flex gap-2">
-        <input
-          name="name"
-          required
-          maxLength={120}
-          placeholder="اسم مادة جديدة (مثلاً Cardiology)"
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 outline-none focus:border-teal-500"
-        />
-        <button className="rounded-lg bg-teal-600 px-5 font-semibold hover:bg-teal-500">
-          إضافة
-        </button>
-      </form>
-
-      {error && <p className="mb-4 text-sm text-red-400">حصل خطأ: {error.message}</p>}
-
-      {subjects?.length === 0 && (
-        <p className="text-slate-400">لسه معندكش مواد. ضيف أول مادة من فوق.</p>
-      )}
-
-      <ul className="space-y-3">
-        {subjects?.map((s) => (
-          <li
-            key={s.id}
-            className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 p-4"
-          >
-            <Link href={`/subjects/${s.id}`} className="flex-1 font-medium hover:text-teal-400">
-              {s.name}
-            </Link>
-            <form action={deleteSubject}>
-              <input type="hidden" name="id" value={s.id} />
-              <ConfirmButton
-                message={`مسح "${s.name}" وكل ما فيها؟`}
-                className="text-sm text-slate-500 hover:text-red-400"
-              >
-                مسح
-              </ConfirmButton>
-            </form>
-          </li>
+      <section className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
+        {stats.map((s) => (
+          <div key={s.label} className="glass flex items-center justify-between gap-3">
+            <div>
+              <div className="muted text-sm">{s.label}</div>
+              <div dir="ltr" className="mt-1 text-3xl font-bold">{s.value}</div>
+            </div>
+            <span className={`tile ${s.c}`}>
+              <Icon name={s.icon} />
+            </span>
+          </div>
         ))}
-      </ul>
-    </main>
+      </section>
+
+      <section className="flex flex-wrap items-stretch gap-5">
+        <div className="glass flex min-w-[300px] flex-[2_1_440px] flex-col gap-4">
+          <h2 className="text-xl font-semibold">{t.yourSubjects}</h2>
+          {error && <p className="text-sm text-red-400">{error.message}</p>}
+          {subjects?.length === 0 && <p className="muted">{t.noSubjects}</p>}
+          {subjects?.map((s) => (
+            <div
+              key={s.id}
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-[#050d1e]/55 p-3.5"
+            >
+              <span className="tile bg-gradient-to-br from-violet-600 to-blue-600">
+                <Icon name="cap" />
+              </span>
+              <div className="min-w-[120px] flex-1">
+                <strong dir="auto">{s.name}</strong>
+                <div className="muted text-sm">{t.filesCount.replace('{n}', String(counts.get(s.id) ?? 0))}</div>
+              </div>
+              <Link href={`/subjects/${s.id}`} className="btn btn-teal btn-sm">
+                {t.open}
+              </Link>
+              <form action={deleteSubject}>
+                <input type="hidden" name="id" value={s.id} />
+                <ConfirmButton
+                  message={t.confirmDeleteSubject.replace('{name}', s.name)}
+                  className="btn btn-ghost btn-sm !text-red-400"
+                >
+                  <Icon name="trash" className="h-4 w-4" />
+                  <span className="sr-only">{t.del}</span>
+                </ConfirmButton>
+              </form>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex min-w-[280px] flex-[1_1_300px] flex-col gap-5">
+          <form action={createSubject} className="glass flex flex-col gap-3">
+            <h2 className="text-xl font-semibold">{t.addTitle}</h2>
+            <input
+              name="name"
+              required
+              maxLength={120}
+              dir="auto"
+              aria-label={t.addTitle}
+              placeholder={t.subjectPlaceholder}
+              className="field"
+            />
+            <button className="btn btn-teal">+ {t.addSubject}</button>
+          </form>
+
+          <div className="glass flex flex-col gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">{t.quick.title}</h2>
+              <p className="muted mt-1 text-sm">{t.quick.sub}</p>
+            </div>
+            <button disabled className="btn btn-blue">{t.quick.quiz} · {t.soon}</button>
+            <button disabled className="btn btn-violet">{t.quick.viva} · {t.soon}</button>
+            <button disabled className="btn btn-ghost">{t.quick.planner} · {t.soon}</button>
+          </div>
+        </div>
+      </section>
+    </AppShell>
   )
 }

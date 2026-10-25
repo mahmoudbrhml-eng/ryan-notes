@@ -3,31 +3,39 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Icon from './Icon'
 
 const MAX_BYTES = 50 * 1024 * 1024 // matches the bucket limit
+
+type Labels = { drop: string; dropHint: string; uploading: string; tooBig: string }
 
 export default function FileUploader({
   userId,
   subjectId,
+  labels,
 }: {
   userId: string
   subjectId: string
+  labels: Labels
 }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
   const [msgs, setMsgs] = useState<string[]>([])
+  const busy = status !== null
 
   async function upload(list: FileList | null) {
     if (!list || list.length === 0) return
-    setBusy(true)
+    const all = Array.from(list)
     setMsgs([])
     const supabase = createClient()
     const problems: string[] = []
 
-    for (const file of Array.from(list)) {
+    for (let i = 0; i < all.length; i++) {
+      const file = all[i]
+      setStatus(labels.uploading.replace('{i}', String(i + 1)).replace('{n}', String(all.length)))
       if (file.size > MAX_BYTES) {
-        problems.push(`${file.name}: أكبر من 50MB`)
+        problems.push(`${file.name}: ${labels.tooBig}`)
         continue
       }
       const fileId = crypto.randomUUID()
@@ -58,7 +66,7 @@ export default function FileUploader({
     }
 
     setMsgs(problems)
-    setBusy(false)
+    setStatus(null)
     if (input.current) input.current.value = ''
     router.refresh()
   }
@@ -71,24 +79,27 @@ export default function FileUploader({
           e.preventDefault()
           upload(e.dataTransfer.files)
         }}
-        className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-700 px-4 py-8 text-center text-slate-400 hover:border-teal-500"
+        className="dropzone"
       >
-        <span>{busy ? 'جارٍ الرفع...' : 'اسحب الملفات هنا أو اضغط للاختيار'}</span>
-        <small>PDF · PPTX · DOCX · TXT · صور · صوت (حتى 50MB للملف)</small>
+        <Icon name="up" className="h-7 w-7" />
+        <span>{status ?? labels.drop}</span>
+        <small>{labels.dropHint}</small>
         <input
           ref={input}
           type="file"
           multiple
           disabled={busy}
           accept=".pdf,.pptx,.docx,.txt,.md,image/*,audio/*,video/*"
-          className="hidden"
+          className="sr-only"
           onChange={(e) => upload(e.target.files)}
         />
       </label>
       {msgs.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm text-red-400">
           {msgs.map((m, i) => (
-            <li key={i}>{m}</li>
+            <li key={i} dir="auto">
+              {m}
+            </li>
           ))}
         </ul>
       )}

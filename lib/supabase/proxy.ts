@@ -23,13 +23,12 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // getClaims() validates the JWT; never trust getSession() on the server.
   const { data } = await supabase.auth.getClaims()
   const loggedIn = !!data?.claims
 
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login')
-  const isPublic = isAuthPage || path.startsWith('/auth')
+  const isPublic = path === '/' || isAuthPage || path.startsWith('/auth')
 
   if (!loggedIn && !isPublic) {
     const url = request.nextUrl.clone()
