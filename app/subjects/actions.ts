@@ -20,6 +20,17 @@ export async function deleteSubject(formData: FormData) {
   if (!id) return
 
   const supabase = await createClient()
+
+  // Remove the stored files first, otherwise they would be orphaned in Storage.
+  const { data: files } = await supabase
+    .from('files')
+    .select('storage_path')
+    .eq('subject_id', id)
+  const paths = (files ?? []).map((f) => f.storage_path)
+  if (paths.length > 0) {
+    await supabase.storage.from('lecture-files').remove(paths)
+  }
+
   const { error } = await supabase.from('subjects').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/subjects')
