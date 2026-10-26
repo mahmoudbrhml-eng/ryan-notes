@@ -80,6 +80,7 @@ export default async function Landing() {
         <p className="muted">{L.ctaSub}</p>
         <Link href="/login" className="btn btn-primary mt-2 !px-6 !py-3">{L.start}</Link>
       </section>
+      <footer className="muted pb-6 text-center text-xs leading-6">{L.legal}</footer>
     </main>
   )
 }

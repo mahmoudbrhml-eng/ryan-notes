@@ -23,7 +23,7 @@ export default async function SubjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ f?: string; tab?: string }>
+  searchParams: Promise<{ f?: string; tab?: string; mode?: string }>
 }) {
   const { id } = await params
   const sp = await searchParams
@@ -161,7 +161,7 @@ export default async function SubjectPage({
           </div>
 
           <div className="flex-1 px-5 py-5">
-            {tab === 'chat' && <ChatPanel subjectId={subject.id} hasSources={anyTranscript} t={t.chat} langLabels={langLabels} />}
+            {tab === 'chat' && <ChatPanel key={sp.mode === 'exam' ? 'exam' : 'chat'} subjectId={subject.id} hasSources={anyTranscript} t={t.chat} langLabels={langLabels} initialMode={sp.mode === 'exam' ? 'exam' : 'explain'} />}
 
             {tab === 'transcript' &&
               (transcript ? (
@@ -220,7 +220,7 @@ export default async function SubjectPage({
         </section>
 
         {/* ---------- Studio ---------- */}
-        <StudioPanel subjectId={subject.id} files={studioFiles} activeId={activeId} tab={tab} generated={generated} t={t} />
+        <StudioPanel subjectId={subject.id} files={studioFiles} activeId={activeId} tab={tab} generated={generated} mode={sp.mode === 'exam' ? 'exam' : ''} t={t} />
       </div>
     </AppShell>
   )

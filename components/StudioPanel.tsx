@@ -79,13 +79,14 @@ function Sel<T extends string | number>({
 }
 
 export default function StudioPanel({
-  subjectId, files, activeId, tab, generated, t,
+  subjectId, files, activeId, tab, generated, mode, t,
 }: {
   subjectId: string
   files: StudioFile[]
   activeId: string | null
   tab: Tab
   generated: { kind: 'transcript' | 'summary' | 'quiz'; date: string }[]
+  mode: string
   t: Dict
 }) {
   const router = useRouter()
@@ -100,18 +101,14 @@ export default function StudioPanel({
   const [err, setErr] = useState<string | null>(null)
 
   const href = (k: Tab) => `/subjects/${subjectId}?${activeId ? `f=${activeId}&` : ''}tab=${k}`
-  const live: { k: Tab; icon: IconName; label: string }[] = [
-    { k: 'chat', icon: 'spark', label: t.tools.chat },
-    { k: 'transcript', icon: 'file', label: t.tools.transcript },
-    { k: 'summary', icon: 'sumry', label: t.tools.summary },
-    { k: 'focus', icon: 'star', label: t.tools.focus },
-    { k: 'quiz', icon: 'quiz', label: t.tools.quiz },
-    { k: 'flash', icon: 'flash', label: t.tools.flash },
-  ]
-  const soon: { icon: IconName; label: string }[] = [
-    { icon: 'mind', label: t.tools.mind },
-    { icon: 'mic', label: t.tools.viva },
-    { icon: 'cal', label: t.tools.plan },
+  const tiles: { key: string; icon: IconName; label: string; to: string; current: boolean }[] = [
+    { key: 'chat', icon: 'spark', label: t.tools.chat, to: href('chat'), current: tab === 'chat' && mode !== 'exam' },
+    { key: 'viva', icon: 'mic', label: t.tools.viva, to: `${href('chat')}&mode=exam`, current: tab === 'chat' && mode === 'exam' },
+    { key: 'transcript', icon: 'file', label: t.tools.transcript, to: href('transcript'), current: tab === 'transcript' },
+    { key: 'summary', icon: 'sumry', label: t.tools.summary, to: href('summary'), current: tab === 'summary' },
+    { key: 'focus', icon: 'star', label: t.tools.focus, to: href('focus'), current: tab === 'focus' },
+    { key: 'quiz', icon: 'quiz', label: t.tools.quiz, to: href('quiz'), current: tab === 'quiz' },
+    { key: 'flash', icon: 'flash', label: t.tools.flash, to: href('flash'), current: tab === 'flash' },
   ]
   const langOpts = [
     { v: 'ar' as NLang, l: t.ai.langAr },
@@ -179,17 +176,11 @@ export default function StudioPanel({
       <h2 className="font-semibold">{t.ws.studio}</h2>
 
       <div className="grid grid-cols-2 gap-2">
-        {live.map(({ k, icon, label }) => (
-          <Link key={k} href={href(k)} aria-current={tab === k ? 'page' : undefined} className="stile">
-            <Icon name={icon} className="h-[18px] w-[18px]" />
-            <span className="min-w-0 flex-1 truncate">{label}</span>
-          </Link>
-        ))}
-        {soon.map((x) => (
-          <div key={x.label} className="stile" aria-disabled="true" title={t.soon}>
+        {tiles.map((x) => (
+          <Link key={x.key} href={x.to} aria-current={x.current ? 'page' : undefined} className="stile">
             <Icon name={x.icon} className="h-[18px] w-[18px]" />
             <span className="min-w-0 flex-1 truncate">{x.label}</span>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -204,7 +195,7 @@ export default function StudioPanel({
               <b dir="auto">{file.name}</b>
             </div>
 
-            {tab === 'chat' && <p className="muted text-xs leading-5">{t.studio.chatInfo}</p>}
+            {tab === 'chat' && <p className="muted text-xs leading-5">{mode === 'exam' ? t.studio.vivaInfo : t.studio.chatInfo}</p>}
             {tab === 'focus' && <p className="muted text-xs leading-5">{t.studio.focusInfo}</p>}
 
             {tab === 'transcript' &&

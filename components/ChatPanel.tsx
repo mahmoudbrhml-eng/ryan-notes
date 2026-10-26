@@ -13,15 +13,17 @@ export default function ChatPanel({
   hasSources,
   t,
   langLabels,
+  initialMode,
 }: {
   subjectId: string
+  initialMode: Mode
   hasSources: boolean
   t: Dict['chat']
   langLabels: { ar: string; en: string; fa: string }
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
-  const [mode, setMode] = useState<Mode>('explain')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [lang, setLang] = useState<'ar' | 'en' | 'fa'>('ar')
   const [busy, setBusy] = useState(false)
   const end = useRef<HTMLDivElement>(null)
@@ -107,6 +109,7 @@ export default function ChatPanel({
           <Icon name="send" className="h-[18px] w-[18px] rtl:rotate-180" />
         </button>
       </form>
+      <p className="muted text-center text-xs">{t.note}</p>
     </div>
   )
 }

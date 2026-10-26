@@ -69,6 +69,7 @@ export const en = {
     chatInfo: 'The tutor answers from all transcripts in this subject.',
     focusInfo: 'Collected automatically from the transcript. No AI call needed.',
     working: 'Working…', noSource: 'Add a source first.',
+    vivaInfo: 'Exam mode: the examiner asks one question at a time and grades your answer from your own lectures.',
   },
   quiz: {
     next: 'Next', prev: 'Previous', finish: 'See result', score: 'You scored {s} of {n}',
@@ -81,6 +82,7 @@ export const en = {
     modes: { explain: 'Explain', exam: 'Exam me', clinical: 'Clinical case', teach: 'Teach-back' },
     empty: 'Ask anything about this subject’s lectures. Answers come only from your transcripts.',
     noSources: 'Transcribe a lecture first, then ask questions here.',
+    note: 'Study aid only. Verify with your textbooks and doctors; this is not medical advice.',
   },
   pdf: {
     cover: 'Lecture notes', subject: 'Subject', date: 'Date', contents: 'Contents',
@@ -104,11 +106,12 @@ export const en = {
     list: [
       { title: 'Private subject library', desc: 'Every subject keeps its own lectures, safely stored and visible only to you.', soon: false },
       { title: 'Smart transcript & summary', desc: 'Keeps English medical terms and highlights what your doctor stressed.', soon: false },
-      { title: 'A tutor from your lectures', desc: 'Answers only from your files, and says so when the answer is not there.', soon: true },
-      { title: 'Viva simulator', desc: 'An examiner asks one question, discusses your answer, then scores you.', soon: true },
+      { title: 'A tutor from your lectures', desc: 'Answers only from your files, and says so when the answer is not there.', soon: false },
+      { title: 'Viva practice', desc: 'Exam mode: an examiner asks one question at a time and grades your answer from your lectures.', soon: false },
     ],
     ctaTitle: 'Subject → Lecture → Summary → Quiz',
     ctaSub: 'Create your first subject in a minute.',
+    legal: 'Ryan Notes is a study aid. It does not replace your textbooks, doctors or clinical judgment.',
   },
 }
 export type Dict = typeof en
@@ -184,6 +187,7 @@ export const ar: Dict = {
     chatInfo: 'المدرّس بيجاوب من كل التفريغات اللي في المادة.',
     focusInfo: 'بتتجمع أوتوماتيك من التفريغ، من غير استدعاء للذكاء الاصطناعي.',
     working: 'جارٍ العمل…', noSource: 'ضيف مصدر الأول.',
+    vivaInfo: 'وضع الامتحان: الممتحن بيسأل سؤال واحد كل مرة وبيقيّم إجابتك من محاضراتك إنت.',
   },
   quiz: {
     next: 'التالي', prev: 'السابق', finish: 'شوف النتيجة', score: 'جبت {s} من {n}',
@@ -196,6 +200,7 @@ export const ar: Dict = {
     modes: { explain: 'اشرحلي', exam: 'امتحنّي', clinical: 'حالة إكلينيكية', teach: 'علّمني بالعكس' },
     empty: 'اسأل أي حاجة عن محاضرات المادة. الإجابات بتيجي من التفريغات بتاعتك بس.',
     noSources: 'فرّغ محاضرة الأول، وبعدين اسأل هنا.',
+    note: 'أداة مساعدة للمذاكرة فقط. راجع الكتب والدكاترة، وده مش بديل عن الاستشارة الطبية.',
   },
   pdf: {
     cover: 'ملاحظات المحاضرة', subject: 'المادة', date: 'التاريخ', contents: 'المحتويات',
@@ -219,10 +224,11 @@ export const ar: Dict = {
     list: [
       { title: 'مكتبة مواد خاصة', desc: 'كل مادة ليها محاضراتها، متخزنة بأمان ومش بيشوفها غيرك.', soon: false },
       { title: 'تفريغ وملخص ذكي', desc: 'يحافظ على المصطلحات الإنجليزية ويبرز اللي ركّز عليه الدكتور.', soon: false },
-      { title: 'مدرّس من محاضراتك', desc: 'يجاوب من ملفاتك بس، ويقولك لو الإجابة مش موجودة.', soon: true },
-      { title: 'محاكي الشفوي', desc: 'ممتحن يسأل سؤال، يناقشك، وبعدين يقيّم إجابتك.', soon: true },
+      { title: 'مدرّس من محاضراتك', desc: 'يجاوب من ملفاتك بس، ويقولك لو الإجابة مش موجودة.', soon: false },
+      { title: 'تدريب الشفوي', desc: 'وضع الامتحان: ممتحن بيسأل سؤال سؤال وبيقيّم إجابتك من محاضراتك.', soon: false },
     ],
     ctaTitle: 'مادة ← محاضرة ← ملخص ← اختبار',
     ctaSub: 'اعمل أول مادة في دقيقة.',
+    legal: 'Ryan Notes أداة مساعدة للمذاكرة. مش بديل عن الكتب ولا الدكاترة ولا القرار الإكلينيكي.',
   },
 }
