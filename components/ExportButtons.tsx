@@ -1,19 +1,26 @@
 'use client'
 
 import { useState } from 'react'
+import Icon from './Icon'
 
 export default function ExportButtons({
   text,
   filename,
+  pdfHref,
   labels,
 }: {
   text: string
   filename: string
-  labels: { copy: string; copied: string; download: string }
+  pdfHref: string
+  labels: { copy: string; copied: string; md: string; pdf: string }
 }) {
   const [ok, setOk] = useState(false)
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      <a href={pdfHref} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
+        <Icon name="download" className="h-4 w-4" />
+        {labels.pdf}
+      </a>
       <button
         type="button"
         className="btn btn-ghost btn-sm"
@@ -39,7 +46,7 @@ export default function ExportButtons({
           URL.revokeObjectURL(url)
         }}
       >
-        {labels.download}
+        {labels.md}
       </button>
     </div>
   )

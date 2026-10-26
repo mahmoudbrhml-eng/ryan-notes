@@ -35,14 +35,11 @@ export default function GenerateSummary({
 
   return (
     <div className="flex flex-col items-start gap-3">
-      <button type="button" disabled={busy} onClick={run} className="btn btn-teal">
+      <button type="button" disabled={busy} onClick={run} className="btn btn-primary">
+        {busy && <span className="spinner" />}
         {busy ? labels.summarizing : labels.summarize}
       </button>
-      {err && (
-        <p role="alert" className="text-sm text-red-400">
-          {err}
-        </p>
-      )}
+      {err && <p role="alert" className="text-sm text-danger">{err}</p>}
     </div>
   )
 }
