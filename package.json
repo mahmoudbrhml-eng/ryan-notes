@@ -2,13 +2,19 @@
   "name": "ryan-notes",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "dev": "next dev", "build": "next build", "start": "next start" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
   "dependencies": {
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "@supabase/ssr": "latest",
-    "@supabase/supabase-js": "latest"
+    "@supabase/supabase-js": "latest",
+    "react-markdown": "^10.0.0",
+    "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5",
