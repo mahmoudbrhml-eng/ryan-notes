@@ -37,7 +37,7 @@ export const en = {
   },
   tools: {
     transcript: 'Transcript', summary: 'Summary', focus: 'Doctor’s focus', quiz: 'Quiz',
-    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan',
+    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan', chat: 'Tutor',
   },
   upload: {
     drop: 'Drag files here or click to choose',
@@ -58,6 +58,29 @@ export const en = {
     noFocus: 'No “Doctor’s focus” lines were found in this transcript.',
     focusHint: 'Points the doctor stressed for the exam, collected from the transcript.',
     noSummary: 'No summary yet.',
+  },
+  studio: {
+    source: 'Source', language: 'Language', length: 'Length', short: 'Short', detailed: 'Detailed',
+    count: 'Questions', level: 'Difficulty', easy: 'Easy', medium: 'Medium', hard: 'Hard',
+    start: 'Start', generate: 'Generate', regenerate: 'Regenerate',
+    needTranscript: 'Transcribe this source first (Studio → Transcript).',
+    notTranscribed: 'This source has no transcript yet. Open Studio → Transcript to start.',
+    flashInfo: 'Flashcards are built from the quiz questions.',
+    chatInfo: 'The tutor answers from all transcripts in this subject.',
+    focusInfo: 'Collected automatically from the transcript. No AI call needed.',
+    working: 'Working…', noSource: 'Add a source first.',
+  },
+  quiz: {
+    next: 'Next', prev: 'Previous', finish: 'See result', score: 'You scored {s} of {n}',
+    retryWrong: 'Retry wrong answers', restart: 'Start over', correct: 'Correct', wrong: 'Not quite',
+    qOf: 'Question {i} of {n}', flip: 'Tap the card to flip', answer: 'Answer',
+    empty: 'No quiz yet. Generate one from the Studio.',
+  },
+  chat: {
+    placeholder: 'Ask about your lectures…', send: 'Send', thinking: 'Thinking…', clear: 'Clear', mode: 'Mode',
+    modes: { explain: 'Explain', exam: 'Exam me', clinical: 'Clinical case', teach: 'Teach-back' },
+    empty: 'Ask anything about this subject’s lectures. Answers come only from your transcripts.',
+    noSources: 'Transcribe a lecture first, then ask questions here.',
   },
   pdf: {
     cover: 'Lecture notes', subject: 'Subject', date: 'Date', contents: 'Contents',
@@ -129,7 +152,7 @@ export const ar: Dict = {
   },
   tools: {
     transcript: 'التفريغ', summary: 'الملخص', focus: 'تركيز الدكتور', quiz: 'اختبار',
-    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة',
+    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة', chat: 'المدرّس',
   },
   upload: {
     drop: 'اسحب الملفات هنا أو اضغط للاختيار',
@@ -150,6 +173,29 @@ export const ar: Dict = {
     noFocus: 'مفيش سطور “تركيز الدكتور” في التفريغ ده.',
     focusHint: 'النقاط اللي ركّز عليها الدكتور للامتحان، متجمعة من التفريغ.',
     noSummary: 'لسه مفيش ملخص.',
+  },
+  studio: {
+    source: 'المصدر', language: 'اللغة', length: 'الطول', short: 'مختصر', detailed: 'مفصل',
+    count: 'عدد الأسئلة', level: 'المستوى', easy: 'سهل', medium: 'متوسط', hard: 'صعب',
+    start: 'ابدأ', generate: 'إنشاء', regenerate: 'إعادة الإنشاء',
+    needTranscript: 'فرّغ المصدر ده الأول (الاستوديو ← التفريغ).',
+    notTranscribed: 'المصدر ده لسه مفيهوش تفريغ. افتح الاستوديو ← التفريغ وابدأ.',
+    flashInfo: 'البطاقات بتتعمل من أسئلة الاختبار.',
+    chatInfo: 'المدرّس بيجاوب من كل التفريغات اللي في المادة.',
+    focusInfo: 'بتتجمع أوتوماتيك من التفريغ، من غير استدعاء للذكاء الاصطناعي.',
+    working: 'جارٍ العمل…', noSource: 'ضيف مصدر الأول.',
+  },
+  quiz: {
+    next: 'التالي', prev: 'السابق', finish: 'شوف النتيجة', score: 'جبت {s} من {n}',
+    retryWrong: 'أعد الأسئلة الغلط', restart: 'ابدأ من الأول', correct: 'صح', wrong: 'مش بالظبط',
+    qOf: 'سؤال {i} من {n}', flip: 'اضغط على البطاقة لقلبها', answer: 'الإجابة',
+    empty: 'لسه مفيش اختبار. اعمل واحد من الاستوديو.',
+  },
+  chat: {
+    placeholder: 'اسأل من محاضراتك…', send: 'إرسال', thinking: 'جارٍ التفكير…', clear: 'مسح', mode: 'الوضع',
+    modes: { explain: 'اشرحلي', exam: 'امتحنّي', clinical: 'حالة إكلينيكية', teach: 'علّمني بالعكس' },
+    empty: 'اسأل أي حاجة عن محاضرات المادة. الإجابات بتيجي من التفريغات بتاعتك بس.',
+    noSources: 'فرّغ محاضرة الأول، وبعدين اسأل هنا.',
   },
   pdf: {
     cover: 'ملاحظات المحاضرة', subject: 'المادة', date: 'التاريخ', contents: 'المحتويات',

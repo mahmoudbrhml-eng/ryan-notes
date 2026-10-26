@@ -30,15 +30,13 @@ export async function POST(req: Request) {
     const { data: used } = await supabase.rpc('bump_usage')
     if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429)
 
-    const lang = (['ar', 'en', 'fa'].includes(tr.lang) ? tr.lang : 'ar') as NotesLang
-    const text = await generate([{ text: summaryPrompt(lang, tr.content) }], { light: true, max: 8000 })
+    const bl = body.lang
+    const lang: NotesLang = bl === 'en' || bl === 'fa' || bl === 'ar' ? bl : (['ar', 'en', 'fa'].includes(tr.lang) ? (tr.lang as NotesLang) : 'ar')
+    const length = body.length === 'short' ? 'short' : 'detailed'
+    const text = await generate([{ text: summaryPrompt(lang, tr.content, length) }], { light: true, max: 8000 })
 
     const { data: existing } = await supabase
-      .from('outputs')
-      .select('id')
-      .eq('file_id', fileId)
-      .eq('kind', 'summary')
-      .maybeSingle()
+      .from('outputs').select('id').eq('file_id', fileId).eq('kind', 'summary').maybeSingle()
     if (existing) await supabase.from('outputs').update({ content: text.trim(), lang }).eq('id', existing.id)
     else
       await supabase.from('outputs').insert({

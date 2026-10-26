@@ -33,5 +33,32 @@ const LANG_NOTE: Record<NotesLang, string> = {
   fa: 'Write in simple formal Arabic with English medical terms kept in English.',
 }
 
-export const summaryPrompt = (lang: NotesLang, md: string) =>
-  `Summarize these lecture notes into a concise, exam-focused summary in markdown: key points, definitions, comparisons (use tables), and a short "must remember" list. Formatting rules: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, and put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
+export const LANG_NAME: Record<NotesLang, string> = {
+  ar: 'Egyptian Arabic (keep English medical terms in English)',
+  en: 'English',
+  fa: 'simple formal Arabic (keep English medical terms in English)',
+}
+
+export const summaryPrompt = (lang: NotesLang, md: string, length: 'short' | 'detailed' = 'detailed') =>
+  `Summarize these lecture notes into ${
+    length === 'short'
+      ? 'a very short exam-revision summary (at most 12 bullet points plus a 5-line "must remember" list)'
+      : 'a concise but complete exam-focused summary'
+  } in markdown: key points, definitions, comparisons (use tables), and a short "must remember" list. Formatting rules: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, and put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
+
+export type QuizLevel = 'easy' | 'medium' | 'hard'
+
+export const quizPrompt = (lang: NotesLang, md: string, count: number, level: QuizLevel) =>
+  `You are a medical exam writer. From the lecture notes below, write ${count} ${level} multiple-choice questions that test understanding and clinical reasoning, not trivia. Prioritize points the lecturer stressed (lines starting with "> ⭐️ Doctor's Focus"). Each question has exactly 4 options and exactly one correct option. Return ONLY a JSON array, no markdown fences. Each item: {"q": string, "o": [string, string, string, string], "a": number (0-3, index of the correct option), "ex": string (short explanation of why the answer is right and why the others are wrong)}. Use only facts that appear in the notes; never invent facts. Keep medical terms in English. Write the questions, options and explanations in ${LANG_NAME[lang]}.\n\nLECTURE NOTES:\n${md.slice(0, 300000)}`
+
+export type ChatMode = 'explain' | 'exam' | 'clinical' | 'teach'
+
+const MODE_RULES: Record<ChatMode, string> = {
+  explain: 'Explain simply and step by step, with a short example when useful.',
+  exam: 'Act as an examiner. Ask ONE question at a time from the material, wait for the student\'s answer, then grade it briefly (what was right, what was missing) and ask the next question.',
+  clinical: 'Present a short clinical case based on the material and ask the student for the diagnosis and next steps. After they answer, reveal the teaching points from the material.',
+  teach: 'The student will explain a topic to you. Correct mistakes and list the points they missed, based only on the material.',
+}
+
+export const chatSystem = (mode: ChatMode, lang: NotesLang) =>
+  `You are a medical study tutor. Answer ONLY from the lecture material provided. If the answer is not in the material, say so clearly and do not invent anything. Mention which lecture the information comes from. Keep medical terms in English. Reply in ${LANG_NAME[lang]}. Use short markdown (bullets, bold for key terms). ${MODE_RULES[mode]}`
