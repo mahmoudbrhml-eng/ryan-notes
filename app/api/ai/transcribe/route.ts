@@ -3,11 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { GeminiError, apiKeys, generate, keyIndexFor, uploadFile, type GeminiPart } from '@/lib/gemini'
 import { SYS, type NotesLang } from '@/lib/prompts'
 import { kindOf, mimeFor } from '@/lib/filekind'
+import { PDFDocument } from 'pdf-lib'
 
 export const maxDuration = 60
 
 const SEG = 300 // seconds of audio per request
 const TEXT_CHUNK = 9000
+const PAGES_PER_CHUNK = 6
 const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 150)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -17,6 +19,7 @@ type Data = {
   kind: string
   lang: NotesLang
   dur: number
+  pages?: number
   parts: Parts
   gemini: { uri: string; mime: string; key: number; at: number } | null
 }
@@ -73,7 +76,7 @@ async function handle(req: Request) {
 
   const { data: file } = await supabase
     .from('files')
-    .select('id, name, storage_path, mime, subject_id')
+    .select('id, name, storage_path, mime, subject_id, source_url')
     .eq('id', fileId)
     .single()
   if (!file) return fail('File not found', 404)
@@ -108,8 +111,36 @@ async function handle(req: Request) {
       const restart = body.restart === true
       const duration = Number(body.duration) > 0 ? Number(body.duration) : 0
       let total = 1
+      let pages = 0
+      let docBuf: ArrayBuffer | null = null
+      let dur = duration
+      const youtube = file.mime === 'video/youtube' && !!file.source_url
       if (kind === 'text') total = splitText(await (await download()).text()).length
-      else if (kind === 'media') total = duration ? Math.ceil(duration / SEG) : 60
+      else if (kind === 'media') {
+        if (youtube && !dur) {
+          try {
+            const ans = await generate(
+              [
+                { fileData: { fileUri: file.source_url as string } },
+                { text: 'Reply with ONLY the total duration of this video in seconds, as a single integer.' },
+              ],
+              { light: true, max: 20, budgetMs: 25000 }
+            )
+            dur = parseInt(ans.replace(/[^0-9]/g, ''), 10) || 0
+          } catch {
+            dur = 0
+          }
+        }
+        total = dur ? Math.ceil(dur / SEG) : 60
+      } else if (kind === 'doc' && (/pdf/i.test(file.mime ?? '') || /\.pdf$/i.test(file.name))) {
+        docBuf = await (await download()).arrayBuffer()
+        try {
+          pages = (await PDFDocument.load(docBuf, { ignoreEncryption: true })).getPageCount()
+        } catch {
+          pages = 0
+        }
+        if (pages > 0) total = Math.max(1, Math.ceil(pages / PAGES_PER_CHUNK))
+      }
 
       const resumable = !restart && old && old.total === total && old.kind === kind
       const parts: Parts = resumable ? old.parts : {}
@@ -119,14 +150,15 @@ async function handle(req: Request) {
         const fresh =
           resumable && old.gemini && old.gemini.key === keyIndex && Date.now() - old.gemini.at < 40 * 3600e3
         if (fresh) gemini = old.gemini
+        else if (youtube) gemini = { uri: file.source_url as string, mime: '', key: keyIndex, at: Date.now() }
         else {
           const mime = mimeFor(file.name, file.mime)
-          const up = await uploadFile(keys[keyIndex], await (await download()).arrayBuffer(), mime, file.name)
+          const up = await uploadFile(keys[keyIndex], docBuf ?? (await (await download()).arrayBuffer()), mime, file.name)
           gemini = { uri: up.uri, mime, key: keyIndex, at: Date.now() }
         }
       }
 
-      const data: Data = { total, kind, lang: resumable ? old.lang : lang, dur: duration || (old?.dur ?? 0), parts, gemini }
+      const data: Data = { total, kind, lang: resumable ? old.lang : lang, dur: dur || (old?.dur ?? 0), pages: pages || old?.pages, parts, gemini }
       const title = file.name.replace(/\.[^.]+$/, '').replace(/[_#]+/g, ' ').trim() || 'Lecture'
       if (out) {
         await supabase.from('outputs').update({ data, lang: data.lang, content: joinParts(parts), title }).eq('id', out.id)
@@ -164,13 +196,21 @@ async function handle(req: Request) {
     } else {
       if (!old.gemini) return fail('Start the transcription first.', 409)
       pinned = true
-      const src: GeminiPart = { fileData: { mimeType: old.gemini.mime, fileUri: old.gemini.uri } }
+      const src: GeminiPart = old.gemini.mime
+        ? { fileData: { mimeType: old.gemini.mime, fileUri: old.gemini.uri } }
+        : { fileData: { fileUri: old.gemini.uri } }
       let ask: string
       if (kind === 'media') {
         const a = i * SEG
         const b = old.dur ? Math.min((i + 1) * SEG, old.dur) : (i + 1) * SEG
         ask =
           `Transcribe ONLY from ${mm(a)} to ${mm(b)} of this recording. If there is no speech in that range, reply exactly NO_MORE_AUDIO.` +
+          (prev ? `\nThe previous part ended with:\n${prev}\nContinue naturally without repeating it.` : '')
+      } else if (old.pages) {
+        const a = i * PAGES_PER_CHUNK + 1
+        const b = Math.min(old.pages, (i + 1) * PAGES_PER_CHUNK)
+        ask =
+          `Convert ONLY pages ${a} to ${b} of this document into organized study notes. Do not skip anything on those pages.` +
           (prev ? `\nThe previous part ended with:\n${prev}\nContinue naturally without repeating it.` : '')
       } else ask = 'Turn this document into organized study notes covering all of it.'
       parts = [src, { text: sys + '\n\n' + ask }]

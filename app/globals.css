@@ -83,6 +83,7 @@ body {
   .subject-row .a-t { align-self: center; }
 
   .ws { display: grid; gap: 14px; padding: 0 14px 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1099px) { .ws { padding-bottom: 88px; } }
   @media (min-width: 1100px) {
     .ws { grid-template-columns: 330px minmax(0, 1fr) 330px; height: calc(100vh - 76px); }
     .ws > * { overflow-y: auto; min-height: 0; }
@@ -100,6 +101,9 @@ body {
   .dropzone:hover { border-color: var(--brand); background: var(--brand-soft); color: var(--fg); }
   .bar { height: 8px; border-radius: 99px; background: var(--surface2); overflow: hidden; }
   .bar > i { display: block; height: 100%; border-radius: 99px; background: var(--brand); transition: width .4s; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); background-size: 200% 100%; animation: sh 1.4s linear infinite; }
+  .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 12px; border: 0; background: transparent; color: var(--fg); font-size: 14px; font-weight: 600; text-align: start; cursor: pointer; }
+  .menu-item:hover { background: var(--surface2); }
+  .menu-item.danger { color: var(--danger); }
   .skeleton { border-radius: 14px; background: linear-gradient(90deg, var(--surface2) 25%, color-mix(in srgb, var(--surface2) 55%, var(--surface)) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: sh 1.3s linear infinite; }
   .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: sp .7s linear infinite; display: inline-block; }
 }

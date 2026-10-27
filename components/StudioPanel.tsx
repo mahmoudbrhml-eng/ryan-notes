@@ -13,13 +13,14 @@ export type StudioFile = {
   kind: FileKind
   mime: string
   url: string
+  isLink: boolean
   status: 'idle' | 'processing' | 'done' | 'error'
   error: string | null
   transcript: boolean
   summary: boolean
   quiz: boolean
 }
-export type Tab = 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash'
+export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash'
 type NLang = 'ar' | 'en' | 'fa'
 type Resp = { error?: string; total?: number; done?: number[]; ended?: boolean }
 
@@ -79,7 +80,7 @@ function Sel<T extends string | number>({
 }
 
 export default function StudioPanel({
-  subjectId, files, activeId, tab, generated, mode, t,
+  subjectId, files, activeId, tab, generated, mode, hideOnMobile, t,
 }: {
   subjectId: string
   files: StudioFile[]
@@ -87,6 +88,7 @@ export default function StudioPanel({
   tab: Tab
   generated: { kind: 'transcript' | 'summary' | 'quiz'; date: string }[]
   mode: string
+  hideOnMobile: boolean
   t: Dict
 }) {
   const router = useRouter()
@@ -100,10 +102,10 @@ export default function StudioPanel({
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState<string | null>(null)
 
-  const href = (k: Tab) => `/subjects/${subjectId}?${activeId ? `f=${activeId}&` : ''}tab=${k}`
+  const href = (k: Tab, p = 'studio') => `/subjects/${subjectId}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
   const tiles: { key: string; icon: IconName; label: string; to: string; current: boolean }[] = [
-    { key: 'chat', icon: 'spark', label: t.tools.chat, to: href('chat'), current: tab === 'chat' && mode !== 'exam' },
-    { key: 'viva', icon: 'mic', label: t.tools.viva, to: `${href('chat')}&mode=exam`, current: tab === 'chat' && mode === 'exam' },
+    { key: 'chat', icon: 'spark', label: t.tools.chat, to: href('chat', 'notes'), current: tab === 'chat' && mode !== 'exam' },
+    { key: 'viva', icon: 'mic', label: t.tools.viva, to: `${href('chat', 'notes')}&mode=exam`, current: tab === 'chat' && mode === 'exam' },
     { key: 'transcript', icon: 'file', label: t.tools.transcript, to: href('transcript'), current: tab === 'transcript' },
     { key: 'summary', icon: 'sumry', label: t.tools.summary, to: href('summary'), current: tab === 'summary' },
     { key: 'focus', icon: 'star', label: t.tools.focus, to: href('focus'), current: tab === 'focus' },
@@ -123,7 +125,7 @@ export default function StudioPanel({
     setPct(0)
     try {
       setMsg(t.ai.preparing)
-      const duration = file.kind === 'media' ? await mediaDuration(file.url, file.mime.startsWith('video')) : 0
+      const duration = file.kind === 'media' && file.url && !file.isLink ? await mediaDuration(file.url, file.mime.startsWith('video')) : 0
       const s = await postJson('/api/ai/transcribe', { action: 'start', fileId: file.id, lang, duration, restart }, t.ai.timeout)
       const total = s.total ?? 1
       const done = new Set(s.done ?? [])
@@ -138,7 +140,7 @@ export default function StudioPanel({
         if (c.ended) break
       }
       setPct(100)
-      router.push(`/subjects/${subjectId}?f=${file.id}&tab=transcript`)
+      router.push(`/subjects/${subjectId}?f=${file.id}&tab=transcript&p=notes`)
     } catch (e) {
       setErr(e instanceof Error ? e.message : t.ai.timeout)
     } finally {
@@ -158,7 +160,7 @@ export default function StudioPanel({
         kind === 'summary' ? { fileId: file.id, lang, length } : { fileId: file.id, lang, count, level },
         t.ai.timeout
       )
-      router.push(`/subjects/${subjectId}?f=${file.id}&tab=${tab === 'flash' ? 'flash' : kind}`)
+      router.push(`/subjects/${subjectId}?f=${file.id}&tab=${tab === 'flash' ? 'flash' : kind}&p=notes`)
     } catch (e) {
       setErr(e instanceof Error ? e.message : t.ai.timeout)
     } finally {
@@ -172,12 +174,12 @@ export default function StudioPanel({
   const shownError = err ?? (file && tab === 'transcript' && file.status === 'error' ? file.error : null)
 
   return (
-    <aside className="panel flex flex-col gap-4 p-4">
+    <aside className={`panel flex flex-col gap-4 p-4 ${hideOnMobile ? 'max-[1099px]:hidden' : ''}`}>
       <h2 className="font-semibold">{t.ws.studio}</h2>
 
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((x) => (
-          <Link key={x.key} href={x.to} aria-current={x.current ? 'page' : undefined} className="stile">
+          <Link key={x.key} scroll={false} href={x.to} aria-current={x.current ? 'page' : undefined} className="stile">
             <Icon name={x.icon} className="h-[18px] w-[18px]" />
             <span className="min-w-0 flex-1 truncate">{x.label}</span>
           </Link>
@@ -195,6 +197,7 @@ export default function StudioPanel({
               <b dir="auto">{file.name}</b>
             </div>
 
+            {tab === 'overview' && <p className="muted text-xs leading-5">{t.ws.pickTool}</p>}
             {tab === 'chat' && <p className="muted text-xs leading-5">{mode === 'exam' ? t.studio.vivaInfo : t.studio.chatInfo}</p>}
             {tab === 'focus' && <p className="muted text-xs leading-5">{t.studio.focusInfo}</p>}
 
@@ -284,7 +287,7 @@ export default function StudioPanel({
                 <span className="tile !h-10 !w-10 bg-brand-soft text-brand">
                   <Icon name={g.kind === 'transcript' ? 'file' : g.kind === 'summary' ? 'sumry' : 'quiz'} className="h-4 w-4" />
                 </span>
-                <Link href={href(g.kind)} className="min-w-0 flex-1">
+                <Link scroll={false} href={href(g.kind, 'notes')} className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{t.tools[g.kind]}</span>
                   <span className="muted text-xs">{g.date}</span>
                 </Link>

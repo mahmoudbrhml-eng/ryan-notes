@@ -30,6 +30,11 @@ const P = {
   flash: 'M8 8h12v12H8zM4 4h12v2M4 4v12h2',
   mind: 'M5 5h4v4H5zM15 5h4v4h-4zM10 15h4v4h-4zM9 7h6M12 9v6',
   more: 'M12 5h.01M12 12h.01M12 19h.01',
+  link: 'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
+  text: 'M4 6h16M4 12h16M4 18h10',
+  play: 'M6 4l14 8-14 8z',
+  speaker: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
+  stop: 'M6 6h12v12H6z',
 } as const
 
 export type IconName = keyof typeof P

@@ -3,6 +3,7 @@ import Icon from './Icon'
 import Logo from './Logo'
 import LangToggle from './LangToggle'
 import ThemeToggle from './ThemeToggle'
+import Menu from './Menu'
 import { signOut } from '@/app/subjects/actions'
 import { getI18n } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase/server'
@@ -42,20 +43,20 @@ export default async function AppShell({
         {!title && <div className="flex-1" />}
         <LangToggle lang={lang} label={t.lang} />
         <ThemeToggle theme={theme} labels={{ system: t.theme.system, light: t.theme.light, dark: t.theme.dark }} />
-        <details className="relative">
-          <summary className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-full bg-brand-soft font-bold text-brand [&::-webkit-details-marker]:hidden">
-            {initial}
-          </summary>
-          <div className="panel absolute end-0 top-12 z-30 w-64 p-3">
-            <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
-            <form action={signOut}>
-              <button className="btn btn-ghost w-full !justify-start">
-                <Icon name="out" className="h-4 w-4" />
-                {t.signOut}
-              </button>
-            </form>
-          </div>
-        </details>
+        <Menu
+          label={email || 'Account'}
+          trigger={initial}
+          className="grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-brand-soft font-bold text-brand"
+          panelClassName="w-64"
+        >
+          <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
+          <form action={signOut}>
+            <button className="menu-item">
+              <Icon name="out" className="h-4 w-4" />
+              {t.signOut}
+            </button>
+          </form>
+        </Menu>
       </header>
       {children}
     </div>

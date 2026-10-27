@@ -33,7 +33,8 @@ export const en = {
     back: 'Subjects',
     close: 'Close',
     pickEmpty: 'Transcribe a source and the results will appear here.',
-    created: 'Created',
+    created: 'Created', overview: 'Source overview', ready: 'Ready', notYet: 'Not created yet',
+    open: 'Open', create: 'Create', openFile: 'Open original file', openVideo: 'Open video', pickTool: 'Pick a tool above.',
   },
   tools: {
     transcript: 'Transcript', summary: 'Summary', focus: 'Doctor’s focus', quiz: 'Quiz',
@@ -48,7 +49,7 @@ export const en = {
   ai: {
     transcribe: 'Transcribe', makeNotes: 'Make notes', notesLang: 'Notes language',
     langAr: 'Egyptian Arabic', langEn: 'English', langFa: 'Formal Arabic',
-    preparing: 'Preparing the file…', part: 'Part {i} of {n}',
+    preparing: 'Preparing the file…', part: 'Transcribing…',
     keepOpen: 'Keep this tab open. Progress is saved after every part, so you can resume anytime.',
     resume: 'Resume', restart: 'Start over', confirmRestart: 'Start over and replace the current result?',
     done: 'Transcribed', partial: 'In progress', timeout: 'The server took too long. Press Resume to continue.',
@@ -83,6 +84,13 @@ export const en = {
     empty: 'Ask anything about this subject’s lectures. Answers come only from your transcripts.',
     noSources: 'Transcribe a lecture first, then ask questions here.',
     note: 'Study aid only. Verify with your textbooks and doctors; this is not medical advice.',
+    voice: { on: 'Voice conversation', off: 'Stop voice', mic: 'Speak', stop: 'Stop', listening: 'Listening…', unsupported: 'Voice input needs Chrome (or another browser with speech recognition).' },
+  },
+  src: {
+    more: 'More', upload: 'Upload files', addText: 'Paste text', addLink: 'Website or YouTube link',
+    textTitle: 'Title', textBody: 'Paste your text here', linkLabel: 'Link', add: 'Add', cancel: 'Cancel',
+    linkHint: 'YouTube links are read by the AI directly (beta). Websites are saved as text.',
+    uploading: 'Uploading…', failed: 'Failed', dismiss: 'Dismiss', adding: 'Adding…',
   },
   pdf: {
     cover: 'Lecture notes', subject: 'Subject', date: 'Date', contents: 'Contents',
@@ -151,7 +159,8 @@ export const ar: Dict = {
     back: 'المواد',
     close: 'إغلاق',
     pickEmpty: 'فرّغ مصدر والنتايج هتظهر هنا.',
-    created: 'تم الإنشاء',
+    created: 'تم الإنشاء', overview: 'نظرة على المصدر', ready: 'جاهز', notYet: 'لسه ما اتعملش',
+    open: 'فتح', create: 'إنشاء', openFile: 'فتح الملف الأصلي', openVideo: 'فتح الفيديو', pickTool: 'اختار أداة من فوق.',
   },
   tools: {
     transcript: 'التفريغ', summary: 'الملخص', focus: 'تركيز الدكتور', quiz: 'اختبار',
@@ -166,7 +175,7 @@ export const ar: Dict = {
   ai: {
     transcribe: 'تفريغ', makeNotes: 'اعمل ملاحظات', notesLang: 'لغة الملاحظات',
     langAr: 'مصري', langEn: 'English', langFa: 'عربي فصيح',
-    preparing: 'جارٍ تجهيز الملف…', part: 'الجزء {i} من {n}',
+    preparing: 'جارٍ تجهيز الملف…', part: 'جارٍ التفريغ…',
     keepOpen: 'سيب التاب مفتوح. التقدم بيتحفظ بعد كل جزء، فتقدر تكمّل في أي وقت.',
     resume: 'كمّل', restart: 'ابدأ من الأول', confirmRestart: 'تبدأ من الأول وتستبدل النتيجة الحالية؟',
     done: 'تم التفريغ', partial: 'جارٍ', timeout: 'السيرفر اتأخر. اضغط كمّل.',
@@ -201,6 +210,13 @@ export const ar: Dict = {
     empty: 'اسأل أي حاجة عن محاضرات المادة. الإجابات بتيجي من التفريغات بتاعتك بس.',
     noSources: 'فرّغ محاضرة الأول، وبعدين اسأل هنا.',
     note: 'أداة مساعدة للمذاكرة فقط. راجع الكتب والدكاترة، وده مش بديل عن الاستشارة الطبية.',
+    voice: { on: 'محادثة صوتية', off: 'إيقاف الصوت', mic: 'تكلّم', stop: 'إيقاف', listening: 'بسمعك…', unsupported: 'الإدخال الصوتي محتاج متصفح Chrome (أو متصفح بيدعم التعرف على الكلام).' },
+  },
+  src: {
+    more: 'المزيد', upload: 'رفع ملفات', addText: 'لصق نص', addLink: 'رابط موقع أو يوتيوب',
+    textTitle: 'العنوان', textBody: 'الصق النص هنا', linkLabel: 'الرابط', add: 'إضافة', cancel: 'إلغاء',
+    linkHint: 'روابط يوتيوب بيقراها الذكاء الاصطناعي مباشرة (تجريبي). المواقع بتتحفظ كنص.',
+    uploading: 'جارٍ الرفع…', failed: 'فشل', dismiss: 'إخفاء', adding: 'جارٍ الإضافة…',
   },
   pdf: {
     cover: 'ملاحظات المحاضرة', subject: 'المادة', date: 'التاريخ', contents: 'المحتويات',

@@ -1,6 +1,6 @@
 const G = 'https://generativelanguage.googleapis.com/'
-const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-3.6-flash', 'gemini-2.5-flash-lite']
-const LIGHT_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.6-flash']
+const DEFAULT_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite']
+const LIGHT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview']
 
 export class GeminiError extends Error {
   status: number
@@ -65,7 +65,7 @@ export async function uploadFile(key: string, data: ArrayBuffer, mimeType: strin
   return { uri: file.uri, name: file.name }
 }
 
-export type GeminiPart = { text: string } | { fileData: { mimeType: string; fileUri: string } }
+export type GeminiPart = { text: string } | { fileData: { mimeType?: string; fileUri: string } }
 
 type GenResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[]
@@ -82,44 +82,59 @@ export async function generate(
   const deadline = Date.now() + (o.budgetMs ?? 48000)
   let last = 'Unknown error'
   let quota = false
+  let only404 = true
 
   for (const ki of order) {
+    let skipKey = false
     for (const m of models(!!o.light)) {
-      if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504)
-      const gc: Record<string, unknown> = { maxOutputTokens: o.max ?? 16000 }
-      if (o.json) gc.responseMimeType = 'application/json'
-      if (m === 'gemini-2.5-flash') gc.thinkingConfig = { thinkingBudget: 0 }
-
-      let r: Response
-      try {
-        r = await fetch(`${G}v1beta/models/${m}:generateContent`, {
-          method: 'POST',
-          headers: { 'x-goog-api-key': ks[ki], 'content-type': 'application/json' },
-          body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }),
-          signal: AbortSignal.timeout(Math.max(2000, deadline - Date.now())),
-        })
-      } catch (e) {
-        last = e instanceof Error ? e.message : 'Network error'
-        continue
+      if (skipKey) break
+      let useThinking = true
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504)
+        const gc: Record<string, unknown> = { maxOutputTokens: o.max ?? 16000 }
+        if (o.json) gc.responseMimeType = 'application/json'
+        if (useThinking) {
+          if (m.startsWith('gemini-2.5')) gc.thinkingConfig = { thinkingBudget: 0 }
+          else if (m.startsWith('gemini-3')) gc.thinkingConfig = { thinkingLevel: 'low' }
+        }
+        let r: Response
+        try {
+          r = await fetch(`${G}v1beta/models/${m}:generateContent`, {
+            method: 'POST',
+            headers: { 'x-goog-api-key': ks[ki], 'content-type': 'application/json' },
+            body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }),
+            signal: AbortSignal.timeout(Math.max(2000, deadline - Date.now())),
+          })
+        } catch (e) {
+          last = e instanceof Error ? e.message : 'Network error'
+          only404 = false
+          break
+        }
+        const j = (await r.json().catch(() => ({}))) as GenResponse
+        if (r.ok) {
+          const t = (j.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? '').join('')
+          if (t) return t
+          last = 'Empty answer'
+          only404 = false
+          break
+        }
+        last = j.error?.message ?? `HTTP ${r.status}`
+        if (r.status === 400 && useThinking && gc.thinkingConfig && /think/i.test(last)) {
+          useThinking = false
+          continue
+        }
+        if (r.status !== 404) only404 = false
+        if (r.status === 429) quota = true
+        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(last))) skipKey = true
+        break
       }
-      const j = (await r.json().catch(() => ({}))) as GenResponse
-      if (r.ok) {
-        const t = (j.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? '').join('')
-        if (t) return t
-        last = 'Empty answer'
-        continue
-      }
-      last = j.error?.message ?? `HTTP ${r.status}`
-      if (r.status === 429) {
-        quota = true
-        continue
-      }
-      if (r.status === 404) continue
-      if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(last))) break
     }
   }
-  throw new GeminiError(
-    quota ? 'AI quota is used up right now. Wait a few minutes and press Resume; your progress is saved.' : last,
-    quota ? 429 : 500
-  )
+  if (quota) throw new GeminiError('AI quota is used up right now. Wait a few minutes and press Resume; your progress is saved.', 429)
+  if (only404)
+    throw new GeminiError(
+      'The configured Gemini models are no longer available. Set GEMINI_MODELS in Vercel to a current model name.',
+      503
+    )
+  throw new GeminiError(last, 500)
 }
