@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { deleteFile } from '@/app/subjects/[id]/actions'
 import Icon, { type IconName } from './Icon'
 import Menu from './Menu'
+import { useSelection } from './Selection'
 import ConfirmButton from './ConfirmButton'
 import type { Dict } from '@/lib/dict'
 
@@ -26,6 +27,8 @@ export default function SourcesPanel({
   t: Dict
 }) {
   const router = useRouter()
+  const sel = useSelection()
+  const press = useRef<{ t: ReturnType<typeof setTimeout> | null; fired: boolean }>({ t: null, fired: false })
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
   const [modal, setModal] = useState<null | 'text' | 'link'>(null)
@@ -163,6 +166,13 @@ export default function SourcesPanel({
         />
       </div>
 
+      {sel.mode && (
+        <div className="flex items-center justify-between rounded-2xl bg-brand-soft px-3 py-2 text-sm font-semibold text-brand">
+          <span>{t.src.selected.replace('{n}', String(sel.selected.length))}</span>
+          <button type="button" className="btn btn-sm !px-3" onClick={sel.clear}>{t.src.done}</button>
+        </div>
+      )}
+
       {empty && <p className="muted py-8 text-center text-sm leading-6">{t.ws.noSources}</p>}
 
       <ul className="flex flex-col gap-1">
@@ -188,37 +198,73 @@ export default function SourcesPanel({
           </li>
         ))}
 
-        {files.map((f) => (
-          <li key={f.id} className="source" data-active={f.id === activeId}>
-            <div className="flex items-center gap-2">
-              <Link
-                scroll={false}
-                href={`/subjects/${subjectId}?f=${f.id}&tab=overview&p=notes`}
-                className="flex min-w-0 flex-1 items-center gap-3"
-              >
-                <span className="tile !h-10 !w-10 bg-surface2 text-navy"><Icon name={f.icon} className="h-4 w-4" /></span>
-                <span className="min-w-0">
-                  <span dir="auto" className="block truncate text-sm font-semibold">{f.name}</span>
-                  <span dir="ltr" className="muted block truncate text-xs">{f.sub}</span>
-                </span>
-              </Link>
-              <Menu
-                label={t.src.more}
-                trigger={<Icon name="more" className="h-[18px] w-[18px]" />}
-                className="btn btn-icon !h-8 !w-8 hover:bg-surface2"
-              >
-                <form action={deleteFile}>
-                  <input type="hidden" name="id" value={f.id} />
-                  <input type="hidden" name="subjectId" value={subjectId} />
-                  <ConfirmButton message={t.ws.confirmDelFile.replace('{name}', f.name)} className="menu-item danger">
-                    <Icon name="trash" className="h-4 w-4" />
-                    {t.ws.delFile}
-                  </ConfirmButton>
-                </form>
-              </Menu>
-            </div>
-          </li>
-        ))}
+        {files.map((f) => {
+          const checked = sel.selected.includes(f.id)
+          return (
+            <li key={f.id} className="source" data-active={sel.mode ? checked : f.id === activeId}>
+              <div className="flex items-center gap-2">
+                <Link
+                  scroll={false}
+                  href={`/subjects/${subjectId}?f=${f.id}&tab=overview&p=notes`}
+                  className="flex min-w-0 flex-1 items-center gap-3 select-none"
+                  style={{ WebkitTouchCallout: 'none' }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onPointerDown={() => {
+                    press.current.fired = false
+                    press.current.t = setTimeout(() => {
+                      press.current.fired = true
+                      sel.start(f.id)
+                    }, 450)
+                  }}
+                  onPointerUp={() => press.current.t && clearTimeout(press.current.t)}
+                  onPointerLeave={() => press.current.t && clearTimeout(press.current.t)}
+                  onPointerCancel={() => press.current.t && clearTimeout(press.current.t)}
+                  onClick={(e) => {
+                    if (press.current.fired) {
+                      e.preventDefault()
+                      press.current.fired = false
+                    } else if (sel.mode) {
+                      e.preventDefault()
+                      sel.toggle(f.id)
+                    }
+                  }}
+                >
+                  {sel.mode && (
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${checked ? 'border-brand bg-brand text-brand-fg' : 'border-line'}`}>
+                      {checked && <Icon name="check" className="h-3.5 w-3.5" />}
+                    </span>
+                  )}
+                  <span className="tile !h-10 !w-10 bg-surface2 text-navy"><Icon name={f.icon} className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span dir="auto" className="block truncate text-sm font-semibold">{f.name}</span>
+                    <span dir="ltr" className="muted block truncate text-xs">{f.sub}</span>
+                  </span>
+                </Link>
+                <Menu
+                  label={t.src.more}
+                  trigger={<Icon name="more" className="h-[18px] w-[18px]" />}
+                  className="btn btn-icon !h-8 !w-8 hover:bg-surface2"
+                >
+                  {(close) => (
+                    <>
+                      <button type="button" className="menu-item" onClick={() => { close(); sel.start(f.id) }}>
+                        <Icon name="check" className="h-4 w-4" />{t.src.select}
+                      </button>
+                      <form action={deleteFile}>
+                        <input type="hidden" name="id" value={f.id} />
+                        <input type="hidden" name="subjectId" value={subjectId} />
+                        <ConfirmButton message={t.ws.confirmDelFile.replace('{name}', f.name)} className="menu-item danger">
+                          <Icon name="trash" className="h-4 w-4" />
+                          {t.ws.delFile}
+                        </ConfirmButton>
+                      </form>
+                    </>
+                  )}
+                </Menu>
+              </div>
+            </li>
+          )
+        })}
       </ul>
 
       {modal && (

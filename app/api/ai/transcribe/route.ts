@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { GeminiError, apiKeys, generate, keyIndexFor, uploadFile, type GeminiPart } from '@/lib/gemini'
-import { SYS, type NotesLang } from '@/lib/prompts'
+import { GeminiError, apiKeys, generate, uploadFile, type GeminiPart } from '@/lib/gemini'
+import { SYS, reviewPrompt, type NotesLang } from '@/lib/prompts'
+import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
 import { PDFDocument } from 'pdf-lib'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const SEG = 300 // seconds of audio per request
 const TEXT_CHUNK = 9000
 const PAGES_PER_CHUNK = 6
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 150)
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 type Parts = Record<string, string>
@@ -20,11 +21,12 @@ type Data = {
   lang: NotesLang
   dur: number
   pages?: number
+  reviewed?: Record<string, boolean>
   parts: Parts
   gemini: { uri: string; mime: string; key: number; at: number } | null
 }
 
-const fail = (error: string, status = 400) => NextResponse.json({ error }, { status })
+const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 const mm = (s: number) => {
   s = Math.max(0, Math.floor(s))
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
   try {
     return await handle(req)
   } catch (e) {
-    if (e instanceof GeminiError) return fail(e.message, e.status)
+    if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
     return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
   }
 }
@@ -69,10 +71,10 @@ async function handle(req: Request) {
   const l = body.lang
   const lang: NotesLang = l === 'en' || l === 'fa' ? l : 'ar'
   const action = body.action
-  if (action !== 'start' && action !== 'chunk') return fail('Invalid action')
+  if (action !== 'start' && action !== 'chunk' && action !== 'review') return fail('Invalid action')
 
   const keys = apiKeys()
-  if (keys.length === 0) return fail('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503)
+  if (keys.length === 0) return fail('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503, 'config')
 
   const { data: file } = await supabase
     .from('files')
@@ -85,9 +87,9 @@ async function handle(req: Request) {
   if (kind === 'unsupported') return fail('This file type is not supported yet. Export DOCX/PPTX to PDF first.', 415)
 
   const { data: used } = await supabase.rpc('bump_usage')
-  if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429)
+  if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-  const keyIndex = keyIndexFor(file.id, keys.length)
+  const keyIndex = old?.gemini ? old.gemini.key % keys.length : Math.floor(Math.random() * keys.length)
   const { data: out } = await supabase
     .from('outputs')
     .select('id, data')
@@ -158,7 +160,7 @@ async function handle(req: Request) {
         }
       }
 
-      const data: Data = { total, kind, lang: resumable ? old.lang : lang, dur: dur || (old?.dur ?? 0), pages: pages || old?.pages, parts, gemini }
+      const data: Data = { total, kind, lang: resumable ? old.lang : lang, dur: dur || (old?.dur ?? 0), pages: pages || old?.pages, reviewed: resumable ? (old.reviewed ?? {}) : {}, parts, gemini }
       const title = file.name.replace(/\.[^.]+$/, '').replace(/[_#]+/g, ' ').trim() || 'Lecture'
       if (out) {
         await supabase.from('outputs').update({ data, lang: data.lang, content: joinParts(parts), title }).eq('id', out.id)
@@ -179,6 +181,39 @@ async function handle(req: Request) {
   if (!out || !old) return fail('Start the transcription first.', 409)
   const i = Number(body.index)
   if (!Number.isInteger(i) || i < 0 || i >= old.total) return fail('Invalid part')
+
+  // ---- REVIEW: proofread one finished part before it is shown to anyone ----
+  if (action === 'review') {
+    try {
+      const raw = old.parts[String(i)]
+      if (!raw) return fail('Nothing to review yet.', 409)
+      const reviewed = { ...(old.reviewed ?? {}) }
+      const parts2 = { ...old.parts }
+      if (!reviewed[String(i)]) {
+        let polished = raw
+        try {
+          const txt = await generate([{ text: reviewPrompt(raw) }], { max: 16000 })
+          const cleaned = cleanMarkdown(txt)
+          // Never accept a version that lost a large part of the content.
+          if (cleaned.length >= raw.length * 0.6) polished = cleaned
+        } catch (e) {
+          if (e instanceof GeminiError && e.code === 'quota') throw e
+        }
+        parts2[String(i)] = polished
+        reviewed[String(i)] = true
+      }
+      const doneAll = Array.from({ length: old.total }, (_, k) => k).every((k) => reviewed[String(k)])
+      await supabase
+        .from('outputs')
+        .update({ content: joinParts(parts2), data: { ...old, parts: parts2, reviewed } })
+        .eq('id', out.id)
+      if (doneAll) await supabase.from('files').update({ ai_status: 'done', ai_error: null }).eq('id', fileId)
+      return NextResponse.json({ ok: true, index: i, complete: doneAll })
+    } catch (e) {
+      await setError(e instanceof Error ? e.message : 'Failed')
+      throw e
+    }
+  }
 
   try {
     const prevIdx = Object.keys(old.parts).map(Number).filter((k) => k < i).sort((a, b) => b - a)[0]
@@ -216,11 +251,26 @@ async function handle(req: Request) {
       parts = [src, { text: sys + '\n\n' + ask }]
     }
 
-    const text = await generate(parts, { max: 16000, pinned, keyIndex: old.gemini?.key })
+    let text: string
+    try {
+      text = await generate(parts, { max: 16000, pinned, keyIndex: old.gemini?.key })
+    } catch (e) {
+      // This key is out of quota: move the uploaded file to the next key and ask the browser to retry.
+      if (e instanceof GeminiError && e.code === 'quota' && pinned && keys.length > 1 && old.gemini && old.gemini.mime) {
+        const nk = (old.gemini.key + 1) % keys.length
+        const up = await uploadFile(keys[nk], await (await download()).arrayBuffer(), old.gemini.mime, file.name)
+        await supabase
+          .from('outputs')
+          .update({ data: { ...old, gemini: { uri: up.uri, mime: old.gemini.mime, key: nk, at: Date.now() } } })
+          .eq('id', out.id)
+        return NextResponse.json({ error: 'Switching to another AI key…', code: 'retry', retry: true }, { status: 503 })
+      }
+      throw e
+    }
     const newParts = { ...old.parts }
     let total = old.total
     if (kind === 'media' && /NO_MORE_AUDIO/.test(text)) total = i
-    else newParts[String(i)] = text.trim()
+    else newParts[String(i)] = cleanMarkdown(text)
 
     if (total === 0) {
       await setError('No speech was found in this file.')
@@ -231,7 +281,6 @@ async function handle(req: Request) {
       .from('outputs')
       .update({ content: joinParts(newParts), data: { ...old, parts: newParts, total } })
       .eq('id', out.id)
-    if (complete) await supabase.from('files').update({ ai_status: 'done', ai_error: null }).eq('id', fileId)
     return NextResponse.json({ ok: true, index: i, ended: total !== old.total, complete })
   } catch (e) {
     await setError(e instanceof Error ? e.message : 'Failed')

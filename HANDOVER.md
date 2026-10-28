@@ -34,7 +34,7 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | رابط مشروع Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | المفتاح العام (publishable) فقط |
 | `GEMINI_API_KEYS` | مفتاح أو أكثر مفصولة بفاصلة، بدون مسافات. سرّي، لا يبدأ بـ NEXT_PUBLIC |
-| `AI_DAILY_LIMIT` | (اختياري) أقصى طلبات AI يوميًا لكل مستخدم، الافتراضي 150 |
+| `AI_DAILY_LIMIT` | (اختياري) أقصى طلبات AI يوميًا لكل مستخدم، الافتراضي 400 |
 | `GEMINI_MODELS` | (اختياري) قائمة الموديلات مفصولة بفاصلة |
 
 بعد أي تعديل في المتغيرات: Deployments ← Redeploy.
@@ -67,6 +67,9 @@
 
 ## 8-ب) الاستضافة والتكلفة والموديلات
 - **أسماء موديلات Gemini تتغير:** جوجل توقف موديلات قديمة (مثل `gemini-2.5-flash` و`gemini-2.5-flash-lite`). الموقع يجرّب `gemini-3.5-flash` ثم `gemini-3-flash-preview` ثم `gemini-3.1-flash-lite`. لو ظهرت رسالة "model no longer available": ضع أسماء الموديلات الحالية في `GEMINI_MODELS` في Vercel ثم Redeploy. (صفحة الإيقاف الرسمية: ai.google.dev/gemini-api/docs/deprecations)
+- **مفاتيح Gemini المتعددة:** ضع كل المفاتيح في `GEMINI_API_KEYS` مفصولة بفاصلة بدون مسافات. الموقع يوزّع الطلبات بينها ويحوّل لمفتاح آخر عند تجاوز الحد. تنبيه: استخدام مفاتيح من حسابات مجانية متعددة للالتفاف على الحدود قد يخالف شروط جوجل. الحل المستدام تفعيل الفوترة على مشروع واحد.
+- **مراجعة التفريغ:** بعد كل جزء يمر النص على مراجعة لغوية وإملائية تلقائية (وتنظيف Markdown) قبل أن يظهر للمستخدم.
+- **مدة الدوال:** مضبوطة على 300 ثانية (أقصى حد لخطة Hobby).
 - **بطء الموقع:** اضبط **Vercel ← Settings ← Functions ← Region** على نفس منطقة مشروع Supabase (Supabase ← Project Settings ← General ← Region).
 - **الاستخدام التجاري:** خطة Vercel Hobby للاستخدام الشخصي غير التجاري حسب شروطها. للتجاري: Vercel Pro، أو استضافة Node.js/Next.js (مثل Hostinger)، مع بقاء Supabase وGemini خدمتين منفصلتين لهما خططهما وحدودهما.
 - **روابط يوتيوب:** يقرأها Gemini مباشرة (تجريبي، فيديوهات عامة فقط). المواقع تُحفظ كنص.

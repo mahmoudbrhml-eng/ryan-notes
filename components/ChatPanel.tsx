@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon'
 import Markdown from './Markdown'
+import { useSelection } from './Selection'
 import type { Dict } from '@/lib/dict'
 
 type Msg = { role: 'user' | 'ai'; text: string }
@@ -27,14 +28,16 @@ function recognitionCtor(): RecCtor | null {
 }
 
 export default function ChatPanel({
-  subjectId, hasSources, t, langLabels, initialMode,
+  subjectId, hasSources, t, langLabels, initialMode, errors,
 }: {
   subjectId: string
   hasSources: boolean
   t: Dict['chat']
   langLabels: { ar: string; en: string; fa: string }
   initialMode: Mode
+  errors: Dict['errors']
 }) {
+  const sel = useSelection()
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<Mode>(initialMode)
@@ -132,10 +135,10 @@ export default function ChatPanel({
       const r = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ subjectId, message: text, history: prev, mode: live.current.mode, lang: live.current.lang }),
+        body: JSON.stringify({ subjectId, message: text, history: prev, mode: live.current.mode, lang: live.current.lang, sourceIds: sel.selected }),
       })
-      const j = (await r.json().catch(() => null)) as { reply?: string; error?: string } | null
-      if (!r.ok || !j?.reply) throw new Error(j?.error ?? 'The server took too long. Try again.')
+      const j = (await r.json().catch(() => null)) as { reply?: string; error?: string; code?: string } | null
+      if (!r.ok || !j?.reply) throw new Error((errors as Record<string, string>)[j?.code ?? 'timeout'] ?? j?.error ?? errors.timeout)
       reply = j.reply
       setMsgs([...next, { role: 'ai', text: reply }])
     } catch (e) {
@@ -185,6 +188,8 @@ export default function ChatPanel({
           <button type="button" className="btn btn-ghost btn-sm ms-auto" onClick={() => setMsgs([])}>{t.clear}</button>
         )}
       </div>
+
+      <p className="muted text-xs">{sel.selected.length > 0 ? t.scopeSel.replace('{n}', String(sel.selected.length)) : t.scopeAll}</p>
 
       <div className="flex-1 space-y-3 overflow-y-auto">
         {msgs.length === 0 && <p className="muted py-10 text-center leading-7">{t.empty}</p>}

@@ -62,3 +62,28 @@ const MODE_RULES: Record<ChatMode, string> = {
 
 export const chatSystem = (mode: ChatMode, lang: NotesLang) =>
   `You are a medical study tutor. Answer ONLY from the lecture material provided. If the answer is not in the material, say so clearly and do not invent anything. Mention which lecture the information comes from. Keep medical terms in English. Reply in ${LANG_NAME[lang]}. Use short markdown (bullets, bold for key terms). ${MODE_RULES[mode]}`
+
+export const reviewPrompt = (md: string) =>
+  `You are a meticulous Arabic/English medical copy editor. Proofread the markdown below, which is one part of a lecture transcript.
+Rules:
+- Fix spelling, grammar and punctuation (Arabic and English), obvious speech-recognition mistakes, repeated words, and misspelled medical terms (write English medical terms correctly).
+- Keep the lecturer's dialect/style (Egyptian Arabic stays Egyptian; do not convert it to formal Arabic). Keep English medical terms in English.
+- Do NOT remove, shorten, summarize or add information. Do NOT change meaning, numbers or drug doses.
+- Keep the same markdown structure (## / ### headings, lists, tables, and lines starting with "> ⭐️ Doctor's Focus:"). Repair broken markdown. No LaTeX, no --- lines, no HTML.
+- Return ONLY the corrected markdown, with no comments or code fences.
+
+TEXT:
+${md}`
+
+export const mergePrompt = (lang: NotesLang, sources: { name: string; text: string }[]) =>
+  `You are merging several sources about the SAME medical lecture into ONE complete, well-organized study note written in ${LANG_NAME[lang]}.
+
+${sources.map((s, i) => `SOURCE ${String.fromCharCode(65 + i)} — "${s.name}":\n${s.text}`).join('\n\n')}
+
+Rules:
+1. Keep EVERY unique fact, number, classification, mnemonic and example from all sources. Merge duplicates once, using the clearest wording.
+2. Organize with ## and ### headings in a logical teaching order. Use tables for comparisons and classifications, and lists for enumerations.
+3. After a point that appears in only ONE source, add a short italic tag: *(Only in: <source name>)*. Points present in all sources get no tag.
+4. Keep lines that start with "> ⭐️ Doctor's Focus:" as they are.
+5. End with "## Differences and gaps": for each source, what it adds that the others lack, and any conflicts between sources (say which source states what).
+6. Fix spelling and grammar. Keep English medical terms in English. No LaTeX, no --- lines, no HTML. Do not invent information.`

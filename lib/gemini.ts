@@ -4,9 +4,11 @@ const LIGHT_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-fla
 
 export class GeminiError extends Error {
   status: number
-  constructor(message: string, status = 500) {
+  code: string
+  constructor(message: string, status = 500, code = 'other') {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -77,12 +79,14 @@ export async function generate(
   o: { light?: boolean; json?: boolean; max?: number; keyIndex?: number; pinned?: boolean; budgetMs?: number } = {}
 ): Promise<string> {
   const ks = apiKeys()
-  if (ks.length === 0) throw new GeminiError('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503)
-  const order = o.pinned ? [o.keyIndex ?? 0] : ks.map((_, i) => i)
-  const deadline = Date.now() + (o.budgetMs ?? 48000)
+  if (ks.length === 0) throw new GeminiError('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503, 'config')
+  const start = Math.floor(Math.random() * ks.length)
+  const order = o.pinned ? [o.keyIndex ?? 0] : ks.map((_, i) => (i + start) % ks.length)
+  const deadline = Date.now() + (o.budgetMs ?? 270000)
   let last = 'Unknown error'
   let quota = false
   let only404 = true
+  let tooLarge = false
 
   for (const ki of order) {
     let skipKey = false
@@ -90,7 +94,7 @@ export async function generate(
       if (skipKey) break
       let useThinking = true
       for (let attempt = 0; attempt < 2; attempt++) {
-        if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504)
+        if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504, 'timeout')
         const gc: Record<string, unknown> = { maxOutputTokens: o.max ?? 16000 }
         if (o.json) gc.responseMimeType = 'application/json'
         if (useThinking) {
@@ -119,6 +123,7 @@ export async function generate(
           break
         }
         last = j.error?.message ?? `HTTP ${r.status}`
+        if (r.status === 400 && /token|too large|exceed|payload/i.test(last) && !/think|API key/i.test(last)) tooLarge = true
         if (r.status === 400 && useThinking && gc.thinkingConfig && /think/i.test(last)) {
           useThinking = false
           continue
@@ -130,11 +135,9 @@ export async function generate(
       }
     }
   }
-  if (quota) throw new GeminiError('AI quota is used up right now. Wait a few minutes and press Resume; your progress is saved.', 429)
+  if (quota) throw new GeminiError('AI quota is used up right now. Wait a minute and press Resume.', 429, 'quota')
+  if (tooLarge) throw new GeminiError('This content is too large for one AI request.', 413, 'too_large')
   if (only404)
-    throw new GeminiError(
-      'The configured Gemini models are no longer available. Set GEMINI_MODELS in Vercel to a current model name.',
-      503
-    )
-  throw new GeminiError(last, 500)
+    throw new GeminiError('The configured Gemini models are no longer available. Update GEMINI_MODELS in Vercel.', 503, 'model')
+  throw new GeminiError(last, 500, 'other')
 }

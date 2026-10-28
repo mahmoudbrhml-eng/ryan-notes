@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { chatSystem, type ChatMode, type NotesLang } from '@/lib/prompts'
+import { pickRelevant } from '@/lib/retrieve'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 150)
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const fail = (error: string, status = 400) => NextResponse.json({ error }, { status })
+const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
 export async function POST(req: Request) {
   try {
@@ -30,23 +31,31 @@ export async function POST(req: Request) {
       .map((h) => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${String(h.text ?? '').slice(0, 3000)}`)
       .join('\n')
 
-    const { data: rows } = await supabase
-      .from('outputs')
-      .select('title, content')
-      .eq('subject_id', subjectId)
-      .eq('kind', 'transcript')
+    const ids = (Array.isArray(body.sourceIds) ? (body.sourceIds as unknown[]) : [])
+      .map(String)
+      .filter((x) => UUID.test(x))
+      .slice(0, 12)
+    let query = supabase.from('outputs').select('title, content').eq('subject_id', subjectId).eq('kind', 'transcript')
+    if (ids.length > 0) query = query.in('file_id', ids)
+    const { data: rows } = await query
     const material = (rows ?? []).filter((r) => r.content)
-    if (material.length === 0) return fail('Transcribe a lecture first, then ask questions here.', 409)
+    if (material.length === 0) return fail('Transcribe a lecture first, then ask questions here.', 409, 'need_transcript')
 
     const { data: used } = await supabase.rpc('bump_usage')
-    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429)
+    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-    const context = material.map((r) => `### Lecture: ${r.title}\n${r.content}`).join('\n\n').slice(0, 400000)
+    // Small material is sent whole; large material is reduced to the passages that match the question.
+    const lastUser = [...hist].reverse().find((h) => h.role === 'user')
+    const context = pickRelevant(
+      material.map((r) => ({ title: r.title, content: r.content as string })),
+      `${message} ${String(lastUser?.text ?? '')}`,
+      70000
+    )
     const prompt = `${chatSystem(mode, lang)}\n\nLECTURE MATERIAL:\n${context}\n\nCONVERSATION:\n${convo}\nStudent: ${message}\nTutor:`
     const reply = await generate([{ text: prompt }], { max: 4000 })
     return NextResponse.json({ reply: reply.trim() })
   } catch (e) {
-    if (e instanceof GeminiError) return fail(e.message, e.status)
+    if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
     return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
   }
 }

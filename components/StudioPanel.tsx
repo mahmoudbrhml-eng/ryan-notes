@@ -3,13 +3,16 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import Icon, { type IconName } from './Icon'
+import { useSelection } from './Selection'
 import type { Dict } from '@/lib/dict'
 import type { FileKind } from '@/lib/filekind'
 
 export type StudioFile = {
   id: string
   name: string
+  path: string
   kind: FileKind
   mime: string
   url: string
@@ -20,9 +23,19 @@ export type StudioFile = {
   summary: boolean
   quiz: boolean
 }
-export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash'
+export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'combo'
 type NLang = 'ar' | 'en' | 'fa'
-type Resp = { error?: string; total?: number; done?: number[]; ended?: boolean }
+type Resp = { error?: string; code?: string; total?: number; done?: number[]; ended?: boolean; retry?: boolean; id?: string }
+
+class ApiError extends Error {
+  code: string
+  constructor(message: string, code: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function mediaDuration(url: string, video: boolean): Promise<number> {
   return new Promise((resolve) => {
@@ -39,20 +52,28 @@ function mediaDuration(url: string, video: boolean): Promise<number> {
   })
 }
 
-// Retries network failures and empty 5xx replies; a message from the server is shown as is.
-async function postJson(url: string, body: object, fallback: string): Promise<Resp> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+// Retries network drops, empty 5xx replies and the server's "switch key and retry" signal.
+async function postJson(url: string, body: object): Promise<Resp> {
+  let last = new ApiError('', 'timeout')
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const j = (await r.json().catch(() => null)) as Resp | null
       if (r.ok) return j ?? {}
-      if (j?.error) throw new Error(j.error)
+      if (j?.retry) {
+        last = new ApiError(j.error ?? '', 'retry')
+        await sleep(800)
+        continue
+      }
+      if (j?.error) throw new ApiError(j.error, j.code ?? 'other')
+      last = new ApiError('', 'timeout')
     } catch (e) {
       if (!(e instanceof TypeError)) throw e
+      last = new ApiError('', 'other')
     }
-    await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)))
+    await sleep(1500 * (attempt + 1))
   }
-  throw new Error(fallback)
+  throw last
 }
 
 function Sel<T extends string | number>({
@@ -80,19 +101,24 @@ function Sel<T extends string | number>({
 }
 
 export default function StudioPanel({
-  subjectId, files, activeId, tab, generated, mode, hideOnMobile, t,
+  subjectId, files, activeId, tab, generated, combos, activeCombo, mode, hideOnMobile, t,
 }: {
   subjectId: string
   files: StudioFile[]
   activeId: string | null
   tab: Tab
   generated: { kind: 'transcript' | 'summary' | 'quiz'; date: string }[]
+  combos: { id: string; title: string; date: string }[]
+  activeCombo: string | null
   mode: string
   hideOnMobile: boolean
   t: Dict
 }) {
   const router = useRouter()
+  const sel = useSelection()
   const file = files.find((f) => f.id === activeId) ?? null
+  const selFiles = files.filter((f) => sel.selected.includes(f.id))
+  const missing = selFiles.filter((f) => !f.transcript || f.status !== 'done')
   const [lang, setLang] = useState<NLang>('ar')
   const [length, setLength] = useState<'short' | 'detailed'>('detailed')
   const [count, setCount] = useState(10)
@@ -103,6 +129,10 @@ export default function StudioPanel({
   const [err, setErr] = useState<string | null>(null)
 
   const href = (k: Tab, p = 'studio') => `/subjects/${subjectId}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
+  const friendly = (e: unknown) => {
+    if (e instanceof ApiError) return (t.errors as Record<string, string>)[e.code] ?? e.message
+    return e instanceof Error ? e.message : t.errors.other
+  }
   const tiles: { key: string; icon: IconName; label: string; to: string; current: boolean }[] = [
     { key: 'chat', icon: 'spark', label: t.tools.chat, to: href('chat', 'notes'), current: tab === 'chat' && mode !== 'exam' },
     { key: 'viva', icon: 'mic', label: t.tools.viva, to: `${href('chat', 'notes')}&mode=exam`, current: tab === 'chat' && mode === 'exam' },
@@ -118,31 +148,75 @@ export default function StudioPanel({
     { v: 'fa' as NLang, l: t.ai.langFa },
   ]
 
+  async function transcribeOne(target: StudioFile, restart: boolean, prefix = '') {
+    setPct(0)
+    setMsg(prefix + t.ai.preparing)
+    let url = target.url
+    if (!url && target.kind === 'media' && !target.isLink) {
+      const { data } = await createClient().storage.from('lecture-files').createSignedUrl(target.path, 600)
+      url = data?.signedUrl ?? ''
+    }
+    const duration = target.kind === 'media' && url && !target.isLink ? await mediaDuration(url, target.mime.startsWith('video')) : 0
+    const s = await postJson('/api/ai/transcribe', { action: 'start', fileId: target.id, lang, duration, restart })
+    let total = s.total ?? 1
+    const done = new Set(s.done ?? [])
+    for (let i = 0; i < total; i++) {
+      if (!done.has(i)) {
+        setMsg(prefix + t.ai.part)
+        const c = await postJson('/api/ai/transcribe', { action: 'chunk', fileId: target.id, index: i })
+        if (c.ended) {
+          total = i
+          break
+        }
+      }
+      setPct(Math.round(((i + 1) / total) * 60))
+    }
+    for (let i = 0; i < total; i++) {
+      setMsg(prefix + t.ai.polishing)
+      await postJson('/api/ai/transcribe', { action: 'review', fileId: target.id, index: i })
+      setPct(60 + Math.round(((i + 1) / total) * 40))
+    }
+    setPct(100)
+  }
+
   async function runTranscript(restart: boolean) {
     if (!file) return
     setBusy('transcript')
     setErr(null)
-    setPct(0)
     try {
-      setMsg(t.ai.preparing)
-      const duration = file.kind === 'media' && file.url && !file.isLink ? await mediaDuration(file.url, file.mime.startsWith('video')) : 0
-      const s = await postJson('/api/ai/transcribe', { action: 'start', fileId: file.id, lang, duration, restart }, t.ai.timeout)
-      const total = s.total ?? 1
-      const done = new Set(s.done ?? [])
-      for (let i = 0; i < total; i++) {
-        if (done.has(i)) {
-          setPct(Math.round(((i + 1) / total) * 100))
-          continue
-        }
-        setMsg(t.ai.part.replace('{i}', String(i + 1)).replace('{n}', String(total)))
-        const c = await postJson('/api/ai/transcribe', { action: 'chunk', fileId: file.id, index: i }, t.ai.timeout)
-        setPct(Math.round(((i + 1) / total) * 100))
-        if (c.ended) break
-      }
-      setPct(100)
+      await transcribeOne(file, restart)
       router.push(`/subjects/${subjectId}?f=${file.id}&tab=transcript&p=notes`)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t.ai.timeout)
+      setErr(friendly(e))
+    } finally {
+      setBusy(null)
+      router.refresh()
+    }
+  }
+
+  async function transcribeMissing() {
+    setBusy('transcript')
+    setErr(null)
+    try {
+      for (let k = 0; k < missing.length; k++) await transcribeOne(missing[k], false, `(${k + 1}/${missing.length}) `)
+    } catch (e) {
+      setErr(friendly(e))
+    } finally {
+      setBusy(null)
+      router.refresh()
+    }
+  }
+
+  async function createCombo() {
+    setBusy('combo')
+    setErr(null)
+    setMsg(t.studio.working)
+    try {
+      const r = await postJson('/api/ai/merge', { subjectId, fileIds: selFiles.map((f) => f.id), lang })
+      sel.clear()
+      router.push(`/subjects/${subjectId}?tab=combo&m=${r.id}&p=notes`)
+    } catch (e) {
+      setErr(friendly(e))
     } finally {
       setBusy(null)
       router.refresh()
@@ -155,14 +229,10 @@ export default function StudioPanel({
     setErr(null)
     setMsg(t.studio.working)
     try {
-      await postJson(
-        `/api/ai/${kind}`,
-        kind === 'summary' ? { fileId: file.id, lang, length } : { fileId: file.id, lang, count, level },
-        t.ai.timeout
-      )
+      await postJson(`/api/ai/${kind}`, kind === 'summary' ? { fileId: file.id, lang, length } : { fileId: file.id, lang, count, level })
       router.push(`/subjects/${subjectId}?f=${file.id}&tab=${tab === 'flash' ? 'flash' : kind}&p=notes`)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t.ai.timeout)
+      setErr(friendly(e))
     } finally {
       setBusy(null)
       router.refresh()
@@ -170,7 +240,7 @@ export default function StudioPanel({
   }
 
   const needT = file && !file.transcript
-  const hasTranscriptWork = !!file && (file.transcript || file.status !== 'idle')
+  const hasWork = !!file && (file.transcript || file.status !== 'idle')
   const shownError = err ?? (file && tab === 'transcript' && file.status === 'error' ? file.error : null)
 
   return (
@@ -186,8 +256,50 @@ export default function StudioPanel({
         ))}
       </div>
 
+      {busy === 'transcript' && (
+        <div className="rounded-2xl bg-surface2 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold">
+            <span className="flex min-w-0 items-center gap-2"><span className="spinner shrink-0" /><span className="truncate">{msg}</span></span>
+            <span dir="ltr">{pct}%</span>
+          </div>
+          <div className="bar"><i style={{ width: `${Math.max(pct, 4)}%` }} /></div>
+          <p className="muted mt-2 text-xs leading-5">{t.ai.keepOpen}</p>
+        </div>
+      )}
+
+      {/* ---- several sources selected: combine ---- */}
+      {selFiles.length >= 2 && (
+        <div className="flex flex-col gap-3 rounded-2xl bg-brand-soft p-3">
+          <div>
+            <div className="text-sm font-bold text-brand">{t.studio.comboTitle} · {selFiles.length}</div>
+            <p className="muted mt-1 text-xs leading-5">{t.studio.comboHint}</p>
+          </div>
+          <ul className="space-y-1.5 text-xs">
+            {selFiles.map((f) => (
+              <li key={f.id} className="flex items-center justify-between gap-2">
+                <span dir="auto" className="truncate">{f.name}</span>
+                <span className={`chip ${f.transcript && f.status === 'done' ? '' : 'chip-warn'}`}>
+                  {f.transcript && f.status === 'done' ? t.ws.ready : t.ws.notYet}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+          {missing.length > 0 ? (
+            <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={transcribeMissing}>
+              {t.studio.transcribeMissing.replace('{n}', String(missing.length))}
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={createCombo}>
+              {busy === 'combo' && <span className="spinner" />}
+              {busy === 'combo' ? t.studio.working : t.studio.createCombo}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ---- options for the selected tool ---- */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface2/40 p-3">
+      <div className="flex flex-col gap-3 rounded-2xl bg-surface2/70 p-3">
         {!file ? (
           <p className="muted text-sm">{t.studio.noSource}</p>
         ) : (
@@ -207,35 +319,24 @@ export default function StudioPanel({
               ) : (
                 <>
                   <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
-                  {busy === 'transcript' ? (
-                    <div>
-                      <div className="mb-2 flex items-center justify-between text-xs font-semibold">
-                        <span className="flex items-center gap-2"><span className="spinner" />{msg}</span>
-                        <span dir="ltr">{pct}%</span>
-                      </div>
-                      <div className="bar"><i style={{ width: `${Math.max(pct, 4)}%` }} /></div>
-                      <p className="muted mt-2 text-xs leading-5">{t.ai.keepOpen}</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {file.status === 'done' ? (
-                        <button type="button" className="btn btn-ghost btn-sm"
-                          onClick={() => confirm(t.ai.confirmRestart) && runTranscript(true)}>
-                          {t.studio.regenerate}
-                        </button>
-                      ) : hasTranscriptWork ? (
-                        <>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => runTranscript(false)}>{t.ai.resume}</button>
-                          <button type="button" className="btn btn-ghost btn-sm"
-                            onClick={() => confirm(t.ai.confirmRestart) && runTranscript(true)}>{t.ai.restart}</button>
-                        </>
-                      ) : (
-                        <button type="button" className="btn btn-primary btn-sm" onClick={() => runTranscript(false)}>
-                          {file.kind === 'media' ? t.ai.transcribe : t.ai.makeNotes}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {file.status === 'done' ? (
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy}
+                        onClick={() => confirm(t.ai.confirmRestart) && runTranscript(true)}>
+                        {t.studio.regenerate}
+                      </button>
+                    ) : hasWork ? (
+                      <>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={() => runTranscript(false)}>{t.ai.resume}</button>
+                        <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy}
+                          onClick={() => confirm(t.ai.confirmRestart) && runTranscript(true)}>{t.ai.restart}</button>
+                      </>
+                    ) : (
+                      <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={() => runTranscript(false)}>
+                        {file.kind === 'media' ? t.ai.transcribe : t.ai.makeNotes}
+                      </button>
+                    )}
+                  </div>
                 </>
               ))}
 
@@ -256,12 +357,9 @@ export default function StudioPanel({
                 {tab === 'flash' && <p className="muted text-xs leading-5">{t.studio.flashInfo}</p>}
                 <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
                 <div className="grid grid-cols-2 gap-2">
-                  <Sel label={t.studio.count} value={count} onChange={setCount}
-                    options={[10, 15, 20, 30].map((n) => ({ v: n, l: String(n) }))} />
+                  <Sel label={t.studio.count} value={count} onChange={setCount} options={[10, 15, 20, 30].map((n) => ({ v: n, l: String(n) }))} />
                   <Sel label={t.studio.level} value={level} onChange={setLevel}
-                    options={[
-                      { v: 'easy', l: t.studio.easy }, { v: 'medium', l: t.studio.medium }, { v: 'hard', l: t.studio.hard },
-                    ]} />
+                    options={[{ v: 'easy', l: t.studio.easy }, { v: 'medium', l: t.studio.medium }, { v: 'hard', l: t.studio.hard }]} />
                 </div>
                 <button type="button" className="btn btn-primary btn-sm" disabled={!!busy || !!needT} onClick={() => runSimple('quiz')}>
                   {busy === 'quiz' && <span className="spinner" />}
@@ -273,17 +371,17 @@ export default function StudioPanel({
             {needT && (tab === 'summary' || tab === 'quiz' || tab === 'flash') && (
               <p className="text-xs leading-5 text-warn">{t.studio.needTranscript}</p>
             )}
-            {shownError && <p role="alert" dir="auto" className="text-xs leading-5 text-danger">{shownError}</p>}
           </>
         )}
+        {shownError && <p role="alert" dir="auto" className="text-xs leading-5 text-danger">{shownError}</p>}
       </div>
 
       {generated.length > 0 && (
         <div>
-          <h3 className="muted mb-2 text-xs font-semibold uppercase tracking-wide">{t.ws.generated}</h3>
+          <h3 className="muted mb-2 text-xs font-semibold">{t.ws.generated}</h3>
           <ul className="flex flex-col gap-2">
             {generated.map((g) => (
-              <li key={g.kind} className="flex items-center gap-3 rounded-2xl border border-line p-3">
+              <li key={g.kind} className="flex items-center gap-3 rounded-2xl bg-surface2/70 p-3">
                 <span className="tile !h-10 !w-10 bg-brand-soft text-brand">
                   <Icon name={g.kind === 'transcript' ? 'file' : g.kind === 'summary' ? 'sumry' : 'quiz'} className="h-4 w-4" />
                 </span>
@@ -297,6 +395,27 @@ export default function StudioPanel({
                     <Icon name="download" className="h-4 w-4" />
                   </a>
                 )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {combos.length > 0 && (
+        <div>
+          <h3 className="muted mb-2 text-xs font-semibold">{t.ws.combos}</h3>
+          <ul className="flex flex-col gap-2">
+            {combos.map((c) => (
+              <li key={c.id} className={`flex items-center gap-3 rounded-2xl p-3 ${c.id === activeCombo && tab === 'combo' ? 'bg-brand-soft' : 'bg-surface2/70'}`}>
+                <span className="tile !h-10 !w-10 bg-brand-soft text-brand"><Icon name="mind" className="h-4 w-4" /></span>
+                <Link scroll={false} href={`/subjects/${subjectId}?tab=combo&m=${c.id}&p=notes`} className="min-w-0 flex-1">
+                  <span dir="auto" className="block truncate text-sm font-semibold">{c.title}</span>
+                  <span className="muted text-xs">{c.date}</span>
+                </Link>
+                <a href={`/subjects/${subjectId}/print?k=merged&m=${c.id}`} target="_blank" rel="noreferrer"
+                  aria-label={t.pdf.pdf} title={t.pdf.pdf} className="btn btn-ghost btn-icon !h-8 !w-8">
+                  <Icon name="download" className="h-4 w-4" />
+                </a>
               </li>
             ))}
           </ul>

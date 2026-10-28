@@ -7,6 +7,7 @@ import Icon, { type IconName } from '@/components/Icon'
 import Markdown, { tocOf } from '@/components/Markdown'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
+import { SelectionProvider } from '@/components/Selection'
 import StudioPanel, { type StudioFile, type Tab } from '@/components/StudioPanel'
 import { getI18n } from '@/lib/i18n'
 import { fmtDate, fmtSize } from '@/lib/format'
@@ -14,7 +15,7 @@ import { kindOf } from '@/lib/filekind'
 import { extractFocus } from '@/lib/focus'
 import { createClient } from '@/lib/supabase/server'
 
-const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash']
+const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash', 'combo']
 type Panel = 'sources' | 'notes' | 'studio'
 
 const hostOf = (u: string) => {
@@ -30,7 +31,7 @@ export default async function SubjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ f?: string; tab?: string; mode?: string; p?: string }>
+  searchParams: Promise<{ f?: string; tab?: string; mode?: string; p?: string; m?: string }>
 }) {
   const { id } = await params
   const sp = await searchParams
@@ -46,7 +47,7 @@ export default async function SubjectPage({
       .select('id, name, storage_path, mime, size_bytes, ai_status, ai_error, source_url, created_at')
       .eq('subject_id', id)
       .order('created_at', { ascending: false }),
-    supabase.from('outputs').select('file_id, kind, created_at').eq('subject_id', id),
+    supabase.from('outputs').select('id, file_id, kind, title, created_at').eq('subject_id', id),
   ])
   const subject = subjectRes.data
   // RLS returns nothing for someone else's subject -> 404.
@@ -56,6 +57,8 @@ export default async function SubjectPage({
 
   const files = filesRes.data ?? []
   const outs = outsRes.data ?? []
+  const combos = outs.filter((o) => o.kind === 'merged').sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  const comboId = sp.m ?? combos[0]?.id ?? null
   const has = (fid: string, kind: string) => outs.some((o) => o.file_id === fid && o.kind === kind)
   const firstWith = files.find((f) => has(f.id, 'transcript'))
   const activeId = sp.f && files.some((f) => f.id === sp.f) ? sp.f : (firstWith?.id ?? files[0]?.id ?? null)
@@ -66,11 +69,14 @@ export default async function SubjectPage({
   const panel: Panel =
     sp.p === 'sources' || sp.p === 'notes' || sp.p === 'studio' ? sp.p : files.length > 0 ? 'notes' : 'sources'
 
-  const [signedRes, selRes] = await Promise.all([
+  const [signedRes, selRes, comboRes] = await Promise.all([
     active && !active.source_url
       ? supabase.storage.from('lecture-files').createSignedUrl(active.storage_path, 3600)
       : Promise.resolve(null),
-    activeId ? supabase.from('outputs').select('kind, content, data').eq('file_id', activeId) : Promise.resolve(null),
+    activeId ? supabase.from('outputs').select('kind, content, data, lang').eq('file_id', activeId) : Promise.resolve(null),
+    tab === 'combo' && comboId
+      ? supabase.from('outputs').select('id, title, content, lang').eq('id', comboId).eq('kind', 'merged').maybeSingle()
+      : Promise.resolve(null),
   ])
   const activeUrl = signedRes?.data?.signedUrl ?? ''
   const sel = selRes?.data ?? []
@@ -78,6 +84,10 @@ export default async function SubjectPage({
   const summary = sel.find((o) => o.kind === 'summary')?.content ?? ''
   const questions = ((sel.find((o) => o.kind === 'quiz')?.data as { questions?: Q[] } | null)?.questions ?? []) as Q[]
 
+  const dirOf = (l?: string | null) => (l === 'en' ? 'ltr' : 'rtl') as 'ltr' | 'rtl'
+  const tLang = sel.find((o) => o.kind === 'transcript')?.lang as string | undefined
+  const sLang = sel.find((o) => o.kind === 'summary')?.lang as string | undefined
+  const combo = comboRes?.data ?? null
   const outName = (active?.name ?? '').replace(/\.[^.]+$/, '')
   const anyTranscript = outs.some((o) => o.kind === 'transcript')
   const href = (k: Tab, p: string) => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
@@ -103,6 +113,7 @@ export default async function SubjectPage({
     kind: kindOf(f.name, f.mime),
     mime: f.mime ?? '',
     url: f.id === activeId ? activeUrl : '',
+    path: f.storage_path,
     isLink: !!f.source_url,
     status: f.ai_status as StudioFile['status'],
     error: f.ai_error,
@@ -121,7 +132,7 @@ export default async function SubjectPage({
     { tab: 'quiz', icon: 'quiz', label: t.tools.quiz, ready: questions.length > 0 },
     { tab: 'flash', icon: 'flash', label: t.tools.flash, ready: questions.length > 0 },
   ]
-  const title = tab === 'overview' ? t.ws.overview : t.tools[tab]
+  const title = tab === 'overview' ? t.ws.overview : tab === 'combo' ? t.tools.merged : t.tools[tab]
   const isVideo = (active?.mime ?? '').startsWith('video/') && active?.mime !== 'video/youtube'
   const isAudio = (active?.mime ?? '').startsWith('audio/')
 
@@ -140,6 +151,7 @@ export default async function SubjectPage({
 
   return (
     <AppShell title={subject.name} back={{ href: '/subjects', label: t.ws.back }}>
+      <SelectionProvider>
       <div className="ws">
         <SourcesPanel
           subjectId={subject.id}
@@ -165,6 +177,14 @@ export default async function SubjectPage({
             {tab === 'summary' && summary && (
               <ExportButtons text={summary} filename={`${outName}-summary.md`} pdfHref={pdfHref('summary')} labels={exportLabels} />
             )}
+            {tab === 'combo' && combo?.content && (
+              <ExportButtons
+                text={combo.content as string}
+                filename={`${String(combo.title).slice(0, 60)}.md`}
+                pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
+                labels={exportLabels}
+              />
+            )}
           </div>
 
           <div className="flex-1 px-5 py-5">
@@ -189,7 +209,7 @@ export default async function SubjectPage({
                   </div>
                   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))' }}>
                     {cards.map((c) => (
-                      <div key={c.tab} className="flex flex-col gap-3 rounded-2xl border border-line p-4">
+                      <div key={c.tab} className="flex flex-col gap-3 rounded-2xl bg-surface2 p-4">
                         <div className="flex items-center gap-3">
                           <span className="tile !h-10 !w-10 bg-brand-soft text-brand"><Icon name={c.icon} className="h-4 w-4" /></span>
                           <span className="min-w-0 flex-1 truncate font-semibold">{c.label}</span>
@@ -220,6 +240,7 @@ export default async function SubjectPage({
                 t={t.chat}
                 langLabels={langLabels}
                 initialMode={sp.mode === 'exam' ? 'exam' : 'explain'}
+                errors={t.errors}
               />
             )}
 
@@ -239,14 +260,21 @@ export default async function SubjectPage({
                       </ul>
                     </details>
                   )}
-                  <Markdown>{transcript}</Markdown>
+                  <Markdown dir={dirOf(tLang)}>{transcript}</Markdown>
                 </div>
               ) : (
                 <p className="muted py-10 text-center">{active ? t.studio.notTranscribed : t.ws.pickEmpty}</p>
               ))}
 
             {tab === 'summary' &&
-              (summary ? <Markdown>{summary}</Markdown> : <p className="muted py-10 text-center">{t.ai.noSummary}</p>)}
+              (summary ? <Markdown dir={dirOf(sLang)}>{summary}</Markdown> : <p className="muted py-10 text-center">{t.ai.noSummary}</p>)}
+
+            {tab === 'combo' &&
+              (combo?.content ? (
+                <Markdown dir={dirOf(combo.lang as string)}>{combo.content as string}</Markdown>
+              ) : (
+                <p className="muted py-10 text-center">{t.ws.combos}</p>
+              ))}
 
             {tab === 'focus' && (
               <div className="flex flex-col gap-3">
@@ -284,11 +312,14 @@ export default async function SubjectPage({
           activeId={activeId}
           tab={tab}
           generated={generated}
+          combos={combos.map((c) => ({ id: c.id, title: c.title, date: fmtDate(c.created_at, lang) }))}
+          activeCombo={comboId}
           mode={sp.mode === 'exam' ? 'exam' : ''}
           hideOnMobile={panel !== 'studio'}
           t={t}
         />
       </div>
+      </SelectionProvider>
 
       <nav aria-label="Panels" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface min-[1100px]:hidden">
         {panelBtn('sources', t.ws.sources, 'file')}

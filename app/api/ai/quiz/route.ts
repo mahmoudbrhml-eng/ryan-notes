@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
+import { sampleText } from '@/lib/clean'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 150)
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const fail = (error: string, status = 400) => NextResponse.json({ error }, { status })
+const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
 type Q = { q: string; o: string[]; a: number; ex: string }
 
@@ -55,13 +56,13 @@ export async function POST(req: Request) {
       .eq('file_id', fileId)
       .eq('kind', 'transcript')
       .maybeSingle()
-    if (!tr || !tr.content) return fail('Transcribe the file first.', 409)
+    if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
     const { data: used } = await supabase.rpc('bump_usage')
-    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429)
+    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-    const raw = await generate([{ text: quizPrompt(lang, tr.content, count, level) }], {
-      json: true, max: 14000, budgetMs: 52000,
+    const raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level) }], {
+      json: true, max: 14000,
     })
     const questions = parseQuiz(raw)
     if (questions.length === 0) return fail('The AI returned an unreadable quiz. Press Generate again.', 502)
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
       })
     return NextResponse.json({ ok: true, count: questions.length })
   } catch (e) {
-    if (e instanceof GeminiError) return fail(e.message, e.status)
+    if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
     return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
   }
 }
