@@ -118,6 +118,7 @@ export default async function PrintPage({
       <PagedDoc
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
         filename={`${title}.pdf`}
+        docKind={kind}
         labels={{
           print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back,
           building: t.pdf.building, again: t.pdf.again, save: t.pdf.save, saved: t.pdf.saved,

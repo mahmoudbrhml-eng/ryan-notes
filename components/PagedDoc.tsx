@@ -28,11 +28,13 @@ const safeName = (n: string) => `${(n || 'ryan-notes').replace(/[\\/:*?"<>|]+/g,
 export default function PagedDoc({
   backHref,
   filename,
+  docKind,
   labels,
   children,
 }: {
   backHref: string
   filename: string
+  docKind?: string
   labels: { print: string; hint: string; back: string; building: string; again: string; save: string; saved: string }
   children: ReactNode
 }) {
@@ -42,22 +44,55 @@ export default function PagedDoc({
   const [save, setSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
   const autoTried = useRef(false)
   const saving = useRef(false)
+  // Render facts kept for the telemetry report (the source unmounts when ready).
+  const stats = useRef<{ srcLen: number; outLen: number; pages: number } | null>(null)
+  const html2canvasRef = useRef<((el: HTMLElement, o: Record<string, unknown>) => Promise<HTMLCanvasElement>) | null>(null)
+
+  // One report per download attempt: which engine ran, how complete the output
+  // was, on which device — no more guessing when a user reports a broken PDF.
+  // Telemetry must never break or delay the download itself.
+  const report = (r: { ok: boolean; mode: 'paged' | 'fallback'; pages: number; srcLen: number; outLen: number; ms: number; err?: string }) => {
+    void fetch('/api/pdf-report', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ doc: docKind ?? 'unknown', ...r }),
+    }).catch(() => {})
+  }
+
+  // A page/window raster must never exceed what a phone's GPU can hold: two
+  // attempts, the second at a gentler scale, then fail loudly (never silently).
+  const grab = async (el: HTMLElement, crop: { x?: number; y?: number; width?: number; height?: number } = {}) => {
+    let last: unknown
+    for (const scale of [2, 1.4]) {
+      try {
+        return await html2canvasRef.current!(el, { ...crop, scale, backgroundColor: '#ffffff', useCORS: true, logging: false })
+      } catch (e) {
+        last = e
+      }
+    }
+    throw last instanceof Error ? last : new Error('capture failed')
+  }
 
   const download = async () => {
     if (saving.current) return
     saving.current = true
     setSave('saving')
+    const t0 = Date.now()
     try {
       const [{ jsPDF }, h2c] = await Promise.all([import('jspdf'), import('html2canvas-pro')])
-      const html2canvas = h2c.default
+      html2canvasRef.current = h2c.default as unknown as (el: HTMLElement, o: Record<string, unknown>) => Promise<HTMLCanvasElement>
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true })
+      const mode: 'paged' | 'fallback' = state === 'fallback' ? 'fallback' : 'paged'
+      let pageCount = 0
+      let srcLen = stats.current?.srcLen ?? 0
+      let outLen = stats.current?.outLen ?? 0
       if (state === 'ready' && out.current) {
-        const pages = Array.from(out.current.querySelectorAll('.pagedjs_page'))
+        const pages = Array.from(out.current.querySelectorAll('.pagedjs_page')) as HTMLElement[]
         if (pages.length === 0) throw new Error('no pages rendered')
+        pageCount = pages.length
         for (let i = 0; i < pages.length; i++) {
-          const canvas = await html2canvas(pages[i] as HTMLElement, {
-            scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false,
-          })
+          const canvas = await grab(pages[i])
           if (i > 0) pdf.addPage()
           pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, A4_W, A4_H, undefined, 'FAST')
           canvas.width = 0
@@ -65,36 +100,47 @@ export default function PagedDoc({
           await new Promise((r) => setTimeout(r, 0)) // let the GC keep up on long documents
         }
       } else if (src.current) {
-        // Fallback mode: one tall flowing document, sliced into A4-sized pages.
-        const canvas = await html2canvas(src.current, {
-          scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false,
-        })
-        const sliceH = Math.max(1, Math.floor(canvas.width * (A4_H / A4_W)))
-        const n = Math.max(1, Math.ceil(canvas.height / sliceH))
-        for (let i = 0; i < n; i++) {
-          const h = Math.min(sliceH, canvas.height - i * sliceH)
-          const c = document.createElement('canvas')
-          c.width = canvas.width
-          c.height = h
-          const ctx = c.getContext('2d')
-          if (!ctx) throw new Error('canvas unavailable')
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, c.width, h)
-          ctx.drawImage(canvas, 0, i * sliceH, canvas.width, h, 0, 0, canvas.width, h)
+        // Fallback mode: the flowing document is captured WINDOW BY WINDOW —
+        // one small A4-sized canvas per page. The old approach rendered the
+        // whole document into a single giant canvas, and phone browsers
+        // silently clip canvases beyond a few million pixels: a full lecture
+        // arrived as a 3-page stub. Small window captures work on every device.
+        const el = src.current
+        const rect = el.getBoundingClientRect()
+        if (rect.width < 40) throw new Error('layout not ready')
+        const left = rect.left + window.scrollX
+        const top = rect.top + window.scrollY
+        const elW = Math.ceil(rect.width)
+        const winH = Math.max(200, Math.round(elW * (A4_H / A4_W)))
+        const total = Math.max(1, Math.ceil(el.scrollHeight / winH))
+        pageCount = total
+        srcLen = (el.textContent ?? '').replace(/\s+/g, '').length
+        outLen = srcLen
+        for (let i = 0; i < total; i++) {
+          const h = Math.min(winH, el.scrollHeight - i * winH)
+          const canvas = await grab(el, { x: left, y: top + i * winH, width: elW, height: Math.ceil(h) })
           if (i > 0) pdf.addPage()
-          pdf.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, A4_W, (h / canvas.width) * A4_W, undefined, 'FAST')
-          c.width = 0
-          c.height = 0
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, A4_W, (h / elW) * A4_W, undefined, 'FAST')
+          canvas.width = 0
+          canvas.height = 0
           await new Promise((r) => setTimeout(r, 0))
         }
-        canvas.width = 0
-        canvas.height = 0
       } else throw new Error('nothing to render')
       pdf.save(safeName(filename))
       setSave('saved')
+      report({ ok: true, mode, pages: pageCount, srcLen, outLen, ms: Date.now() - t0 })
     } catch (e) {
       console.warn('pdf save failed:', e)
       setSave('failed')
+      report({
+        ok: false,
+        mode: state === 'fallback' ? 'fallback' : 'paged',
+        pages: 0,
+        srcLen: 0,
+        outLen: 0,
+        ms: Date.now() - t0,
+        err: e instanceof Error ? e.message.slice(0, 160) : 'unknown',
+      })
     } finally {
       saving.current = false
     }
@@ -138,9 +184,10 @@ export default function PagedDoc({
         const pages = out.current.querySelectorAll('.pagedjs_page').length
         const srcLen = (src.current.textContent ?? '').replace(/\s+/g, '').length
         const outLen = (out.current.textContent ?? '').replace(/\s+/g, '').length
-        if (!pages || (srcLen > 1500 && outLen < srcLen * 0.8)) {
+        if (!pages || (srcLen > 1500 && outLen < srcLen * 0.92)) {
           throw new Error(`incomplete render: ${pages} pages, ${outLen}/${srcLen} chars`)
         }
+        stats.current = { srcLen, outLen, pages }
         setState('ready')
       } catch (e) {
         toFallback(e instanceof Error ? e.message : 'unknown error')
