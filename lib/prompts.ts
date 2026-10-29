@@ -40,11 +40,11 @@ export const LANG_NAME: Record<NotesLang, string> = {
 }
 
 export const summaryPrompt = (lang: NotesLang, md: string, length: 'short' | 'detailed' = 'detailed') =>
-  `Summarize these lecture notes into ${
+  `Turn these lecture notes into ${
     length === 'short'
       ? 'a very short exam-revision summary (at most 12 bullet points plus a 5-line "must remember" list)'
-      : 'a concise but complete exam-focused summary'
-  } in markdown: key points, definitions, comparisons (use tables), and a short "must remember" list. Formatting rules: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, and put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
+      : 'a complete, well-organized revision document that keeps EVERY fact, definition, number, drug name and dose, classification, mnemonic, comparison and clinical pearl from the source. Tighten only the wording, never the information: nothing from the source may disappear. Target length is at least HALF the length of the source. Keep every markdown table (copy them fully, do not shrink them), keep all lists expanded item by item, and keep the "Doctor\'s Focus" lines as > blockquotes. Start with a 5-line "The lecture in one minute" overview, then the full structured note.'
+  } in markdown: key points, definitions, comparisons (use tables), and a "must remember" list at the end. Formatting rules: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, and put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
 
 export type QuizLevel = 'easy' | 'medium' | 'hard'
 

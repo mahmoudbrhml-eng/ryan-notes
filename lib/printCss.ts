@@ -23,11 +23,16 @@ export const PRINT_CSS = `
   .pagedjs_page { background: #fff; box-shadow: 0 3px 18px rgba(4,12,28,.16), 0 0 0 1px rgba(4,12,28,.06); }
 }
 
-/* ---------- cover: a small brand mark at the top and the topic title alone ---------- */
+/* ---------- cover: a small brand mark at the top and the styled topic title ---------- */
 .doc-cover { page: cover; width: 210mm; height: 296mm; background: #fff; display: flex; flex-direction: column; align-items: center; }
 .cover-mark { margin-top: 18mm; font-size: 10pt; font-weight: 700; letter-spacing: .34em; text-transform: uppercase; color: #8b98ae; }
-.cover-topic { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; padding: 0 15mm 22mm; }
-.doc-title { string-set: doctitle content(text); font-size: 42pt; font-weight: 800; line-height: 1.42; color: #0a1628; text-align: center; unicode-bidi: plaintext; text-wrap: balance; margin: 0; max-width: 176mm; }
+.cover-topic { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 15mm 22mm; }
+.doc-title { string-set: doctitle content(text); font-size: 44pt; font-weight: 800; line-height: 1.45; color: #0a1628; text-align: center; unicode-bidi: plaintext; text-wrap: balance; margin: 0; max-width: 176mm; }
+/* The topic is styled word by word: teal green → electric blue → deep navy, the brand palette. */
+.doc-title .tw0 { color: #0f766e; }
+.doc-title .tw1 { color: #1d4ed8; }
+.doc-title .tw2 { color: #0a1628; }
+.cover-rule { width: 48mm; height: 1.6mm; border-radius: 99px; margin-top: 11mm; background: linear-gradient(90deg, #14b8a6, #3b82f6); }
 
 /* ---------- contents ---------- */
 .doc-toc { break-before: page; break-after: page; page: toc; direction: ltr; text-align: left; }

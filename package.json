@@ -8,22 +8,24 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
-    "react-markdown": "^10.0.0",
-    "remark-gfm": "^4.0.0",
+    "html2canvas-pro": "^1.6.7",
+    "jspdf": "^2.5.2",
+    "next": "^16.0.0",
+    "pagedjs": "^0.4.3",
     "pdf-lib": "^1.17.1",
-    "pagedjs": "^0.4.3"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.0.0",
+    "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "typescript": "^5"
   }
 }

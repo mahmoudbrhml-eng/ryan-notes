@@ -96,6 +96,7 @@ export const en = {
     linkHint: 'YouTube links are read by the AI directly (beta). Websites are saved as text.',
     uploading: 'Uploading…', failed: 'Failed', dismiss: 'Dismiss', adding: 'Adding…',
     compressing: 'Compressing…', prepTool: 'Preparing the compressor (first time only)…',
+    compressFail: 'Larger than 50MB and the compressor could not shrink it on this device. Try again, or split the file into parts.',
     select: 'Select', selected: '{n} selected', done: 'Done',
   },
   errors: {
@@ -111,8 +112,9 @@ export const en = {
   },
   pdf: {
     cover: 'Lecture notes', subject: 'Subject', date: 'Date', contents: 'Contents',
-    print: 'Print / Save as PDF', hint: 'In the print dialog, choose “Save as PDF” as the destination.',
-    back: 'Back', pdf: 'PDF',
+    print: 'Download PDF', hint: 'The PDF file downloads automatically when it is ready — no print dialog.',
+    again: 'Download again', save: 'Print (paper)', saved: 'PDF downloaded ✓',
+    back: 'Back', pdf: 'PDF', building: 'Building your PDF…',
   },
   login: {
     tagline: 'Study smarter, one lecture at a time.',
@@ -239,6 +241,7 @@ export const ar: Dict = {
     linkHint: 'روابط يوتيوب بيقراها الذكاء الاصطناعي مباشرة (تجريبي). المواقع بتتحفظ كنص.',
     uploading: 'جارٍ الرفع…', failed: 'فشل', dismiss: 'إخفاء', adding: 'جارٍ الإضافة…',
     compressing: 'جارٍ الضغط…', prepTool: 'بنجهّز أداة الضغط (أول مرة بس)…',
+    compressFail: 'الملف أكبر من 50 ميجا ومعرفناش نضغطه على جهازك. جرّب تاني، أو قسّم الملف لأجزاء.',
     select: 'تحديد', selected: 'تم تحديد {n}', done: 'تم',
   },
   errors: {
@@ -254,8 +257,9 @@ export const ar: Dict = {
   },
   pdf: {
     cover: 'ملاحظات المحاضرة', subject: 'المادة', date: 'التاريخ', contents: 'المحتويات',
-    print: 'طباعة / حفظ PDF', hint: 'في نافذة الطباعة اختار “حفظ بتنسيق PDF” (Save as PDF) كوجهة.',
-    back: 'رجوع', pdf: 'PDF',
+    print: 'تنزيل PDF', hint: 'ملف الـPDF هينزل عندك أوتوماتيك أول ما يجهز — من غير نافذة طباعة.',
+    again: 'تنزيل تاني', save: 'طباعة (ورق)', saved: 'اتنزّل الـPDF ✓',
+    back: 'رجوع', pdf: 'PDF', building: 'بنجهّز الـPDF بتاعك…',
   },
   login: {
     tagline: 'ذاكر بذكاء، محاضرة محاضرة.',

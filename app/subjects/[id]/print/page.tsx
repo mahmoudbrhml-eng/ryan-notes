@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
-import Markdown, { BidiText, tocOf } from '@/components/Markdown'
+import { Fragment } from 'react'
+import Markdown, { tocOf } from '@/components/Markdown'
 import PagedDoc from '@/components/PagedDoc'
 import { getI18n } from '@/lib/i18n'
 import { generate } from '@/lib/gemini'
@@ -11,7 +12,26 @@ function englishOnly(s: string) {
   return runs ? runs.map((r) => r.trim()).join(' — ') : s
 }
 
-// Cleans a heading into a topic title: strips markdown symbols and any leading numbering.
+// The cover title is styled word by word (teal → blue → navy, the brand palette).
+// Pure-Latin words get <bdi> so brackets/parentheses stay on the right side in RTL.
+const LATIN_WORD = /^[A-Za-z0-9][A-Za-z0-9'’\-–&%+.:()]*$/
+function ColoredTitle({ title }: { title: string }) {
+  const words = title.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return null
+  return (
+    <>
+      {words.map((w, i) => {
+        const inner = LATIN_WORD.test(w) ? <bdi dir="ltr">{w}</bdi> : w
+        return (
+          <Fragment key={i}>
+            <span className={`tw${i % 3}`}>{inner}</span>
+            {i < words.length - 1 ? ' ' : null}
+          </Fragment>
+        )
+      })}
+    </>
+  )
+}
 const cleanTopic = (s: string) =>
   s
     .replace(/[*_`#>]+/g, '')
@@ -97,16 +117,18 @@ export default async function PrintPage({
     <div className="doc min-h-screen bg-surface2" dir={rtl ? 'rtl' : 'ltr'}>
       <PagedDoc
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
+        filename={`${title}.pdf`}
         labels={{
           print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back,
-          building: lang === 'ar' ? 'جارٍ تجهيز الـPDF…' : 'Preparing the PDF…',
+          building: t.pdf.building, again: t.pdf.again, save: t.pdf.save, saved: t.pdf.saved,
         }}
       >
-        {/* Cover: only the topic, with a small brand mark to keep the attribution. */}
+        {/* Cover: only the styled topic, with a small brand mark to keep the attribution. */}
         <section className="doc-cover">
           <div className="cover-mark">Ryan Notes</div>
           <div className="cover-topic">
-            <h1 className="doc-title"><BidiText text={title} /></h1>
+            <h1 className="doc-title"><ColoredTitle title={title} /></h1>
+            <div className="cover-rule" />
           </div>
         </section>
 

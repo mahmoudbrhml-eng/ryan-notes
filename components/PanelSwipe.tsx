@@ -36,12 +36,19 @@ export default function PanelSwipe({
     setTimeout(() => (lock.current = false), 450)
   }
 
-  // Desktop: arrow keys switch panels (RTL-aware), unless typing in a field.
+  // Desktop: arrow keys (RTL-aware) and Space switch panels, unless typing or
+  // pressing a focused button/link (Space must keep activating those).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
       const el = e.target as HTMLElement | null
       if (el && (el.closest('input, textarea, select, [contenteditable="true"]') || el.closest('.pagedjs'))) return
+      if (e.key === ' ') {
+        if (el && el.closest('button, a, [role="button"], [role="tab"]')) return
+        e.preventDefault()
+        go(1)
+        return
+      }
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
       const rtl = document.documentElement.dir === 'rtl'
       const forward = rtl ? e.key === 'ArrowLeft' : e.key === 'ArrowRight'

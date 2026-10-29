@@ -35,15 +35,17 @@ export async function POST(req: Request) {
     const lang: NotesLang = bl === 'en' || bl === 'fa' || bl === 'ar' ? bl : (['ar', 'en', 'fa'].includes(tr.lang) ? (tr.lang as NotesLang) : 'ar')
     const length = body.length === 'short' ? 'short' : 'detailed'
     // Very long lectures: summarize slices first, then summarize the summaries.
+    // The output caps stay generous: a detailed revision document is meant to be
+    // long, and a tight cap would silently truncate it mid-sentence.
     let text: string
     if (tr.content.length <= 90000) {
-      text = await generate([{ text: summaryPrompt(lang, tr.content, length) }], { light: true, max: 8000 })
+      text = await generate([{ text: summaryPrompt(lang, tr.content, length) }], { light: true, max: 20000 })
     } else {
       const partials: string[] = []
       for (const slice of sliceText(tr.content, 60000).slice(0, 8)) {
-        partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed') }], { light: true, max: 6000 }))
+        partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed') }], { light: true, max: 10000 }))
       }
-      text = await generate([{ text: summaryPrompt(lang, partials.join('\n\n'), length) }], { light: true, max: 8000 })
+      text = await generate([{ text: summaryPrompt(lang, partials.join('\n\n'), length) }], { light: true, max: 20000 })
     }
     text = cleanMarkdown(text)
 
