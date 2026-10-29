@@ -89,7 +89,6 @@ async function handle(req: Request) {
   const { data: used } = await supabase.rpc('bump_usage')
   if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-  const keyIndex = old?.gemini ? old.gemini.key % keys.length : Math.floor(Math.random() * keys.length)
   const { data: out } = await supabase
     .from('outputs')
     .select('id, data')
@@ -97,6 +96,8 @@ async function handle(req: Request) {
     .eq('kind', 'transcript')
     .maybeSingle()
   const old = (out?.data ?? null) as Data | null
+
+  const keyIndex = old?.gemini ? old.gemini.key % keys.length : Math.floor(Math.random() * keys.length)
 
   const download = async () => {
     const { data: blob, error } = await supabase.storage.from('lecture-files').download(file.storage_path)
