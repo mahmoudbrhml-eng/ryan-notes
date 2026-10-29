@@ -5,6 +5,7 @@ import ChatPanel from '@/components/ChatPanel'
 import ExportButtons from '@/components/ExportButtons'
 import Icon, { type IconName } from '@/components/Icon'
 import Markdown, { tocOf } from '@/components/Markdown'
+import PanelSwipe from '@/components/PanelSwipe'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
 import { SelectionProvider } from '@/components/Selection'
@@ -91,6 +92,7 @@ export default async function SubjectPage({
   const outName = (active?.name ?? '').replace(/\.[^.]+$/, '')
   const anyTranscript = outs.some((o) => o.kind === 'transcript')
   const href = (k: Tab, p: string) => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
+  const swipeHref = (p: 'sources' | 'notes' | 'studio') => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${tab}&p=${p}`
   const pdfHref = (k: 'transcript' | 'summary') => `/subjects/${id}/print?f=${activeId}&k=${k}`
   const exportLabels = { copy: t.ai.copy, copied: t.ai.copied, md: t.ai.download, pdf: t.pdf.pdf }
   const langLabels = { ar: t.ai.langAr, en: t.ai.langEn, fa: t.ai.langFa }
@@ -152,6 +154,7 @@ export default async function SubjectPage({
   return (
     <AppShell title={subject.name} back={{ href: '/subjects', label: t.ws.back }}>
       <SelectionProvider>
+      <PanelSwipe current={panel} hrefFor={swipeHref} labels={{ next: t.ws.nextPanel, prev: t.ws.prevPanel }}>
       <div className="ws">
         <SourcesPanel
           subjectId={subject.id}
@@ -319,9 +322,10 @@ export default async function SubjectPage({
           t={t}
         />
       </div>
+      </PanelSwipe>
       </SelectionProvider>
 
-      <nav aria-label="Panels" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface min-[1100px]:hidden">
+      <nav aria-label="Panels" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] min-[1100px]:hidden">
         {panelBtn('sources', t.ws.sources, 'file')}
         {panelBtn('notes', t.ws.notes, 'sumry')}
         {panelBtn('studio', t.ws.studio, 'spark')}

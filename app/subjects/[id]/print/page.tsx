@@ -60,7 +60,7 @@ export default async function PrintPage({
   })
 
   return (
-    <div className="doc min-h-screen" dir={rtl ? 'rtl' : 'ltr'}>
+    <div className="doc min-h-screen bg-surface2" dir={rtl ? 'rtl' : 'ltr'}>
       <PagedDoc
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
         labels={{
@@ -70,7 +70,7 @@ export default async function PrintPage({
       >
         <section className="doc-cover">
           <div className="cover-band">
-            <Logo size={84} />
+            <Logo size={88} />
             <div className="cover-brand">Ryan Notes</div>
             <div className="cover-kind">{kindLabel}</div>
             <h1 className="doc-title"><BidiText text={title} /></h1>
@@ -80,12 +80,15 @@ export default async function PrintPage({
             <div><span>Date</span><b>{fmtDate(out.created_at, 'en')}</b></div>
             <div><span>Language</span><b>{LANG_NAME[out.lang] ?? 'Arabic'}</b></div>
           </div>
-          <div className="cover-foot">Study notes generated with Ryan Notes. Verify against your textbooks and doctors.</div>
+          <div className="cover-rule" />
+          <div className="cover-foot">Study notes generated with Ryan Notes — review them against your textbooks and your doctor's guidance before exams.</div>
         </section>
 
         {items.length > 0 && (
           <section className="doc-toc">
             <h2 className="toc-title">Contents</h2>
+            <p className="toc-sub">{items.length} sections · {kindLabel}</p>
+            <div className="toc-underline" />
             <ol>
               {items.map((h) => (
                 <li key={h.id} className={`l${h.level}`}>

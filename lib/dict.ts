@@ -35,6 +35,7 @@ export const en = {
     pickEmpty: 'Transcribe a source and the results will appear here.',
     created: 'Created', combos: 'Combined notes', overview: 'Source overview', ready: 'Ready', notYet: 'Not created yet',
     open: 'Open', create: 'Create', openFile: 'Open original file', openVideo: 'Open video', pickTool: 'Pick a tool above.',
+    nextPanel: 'Next section', prevPanel: 'Previous section',
   },
   tools: {
     transcript: 'Transcript', summary: 'Summary', focus: 'Doctor’s focus', quiz: 'Quiz',
@@ -176,6 +177,7 @@ export const ar: Dict = {
     pickEmpty: 'فرّغ مصدر والنتايج هتظهر هنا.',
     created: 'تم الإنشاء', combos: 'ملاحظات مجمّعة', overview: 'نظرة على المصدر', ready: 'جاهز', notYet: 'لسه ما اتعملش',
     open: 'فتح', create: 'إنشاء', openFile: 'فتح الملف الأصلي', openVideo: 'فتح الفيديو', pickTool: 'اختار أداة من فوق.',
+    nextPanel: 'القسم اللي بعده', prevPanel: 'القسم اللي قبله',
   },
   tools: {
     transcript: 'التفريغ', summary: 'الملخص', focus: 'تركيز الدكتور', quiz: 'اختبار',
