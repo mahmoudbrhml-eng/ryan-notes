@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation'
-import Logo from '@/components/Logo'
 import Markdown, { BidiText, tocOf } from '@/components/Markdown'
 import PagedDoc from '@/components/PagedDoc'
 import { getI18n } from '@/lib/i18n'
-import { fmtDate } from '@/lib/format'
+import { generate } from '@/lib/gemini'
 import { createClient } from '@/lib/supabase/server'
 
 // The contents page is always in English: keep only the English part of each heading.
@@ -12,7 +11,41 @@ function englishOnly(s: string) {
   return runs ? runs.map((r) => r.trim()).join(' — ') : s
 }
 
-const LANG_NAME: Record<string, string> = { ar: 'Egyptian Arabic', fa: 'Formal Arabic', en: 'English' }
+// Cleans a heading into a topic title: strips markdown symbols and any leading numbering.
+const cleanTopic = (s: string) =>
+  s
+    .replace(/[*_`#>]+/g, '')
+    .replace(/^\s*(?:\d{1,2}\s*[.)-]|[٠-٩]{1,2}\s*[-.)])\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 90)
+
+// The topic of the notes is read from the notes themselves: the first main
+// heading (then the first sub-heading). Only when the content has no structure
+// at all does the AI name it; the file name is the last resort.
+function topicFrom(md: string): string {
+  const heads = tocOf(md)
+  for (const lv of [2, 3]) {
+    const h = heads.find((x) => x.level === lv)
+    if (h) {
+      const c = cleanTopic(h.text)
+      if (c.length >= 3) return c
+    }
+  }
+  return ''
+}
+
+async function aiTopic(md: string): Promise<string> {
+  try {
+    const r = await generate(
+      [{ text: `Give ONE short title (max 8 words) naming the main topic of these study notes. Reply with the title only, in the same language as the notes.\n\n${md.slice(0, 5000)}` }],
+      { light: true, max: 60, budgetMs: 15000 },
+    )
+    return cleanTopic(r.split('\n').filter((x) => x.trim())[0] ?? '')
+  } catch {
+    return ''
+  }
+}
 
 export default async function PrintPage({
   params,
@@ -34,16 +67,17 @@ export default async function PrintPage({
     const { data } = await supabase
       .from('outputs').select('title, content, lang, created_at').eq('id', sp.m).eq('kind', 'merged').eq('subject_id', id).maybeSingle()
     out = data
-    title = data?.title ?? ''
+    title = cleanTopic(data?.title ?? '')
   } else {
     if (!sp.f) notFound()
     const { data: file } = await supabase.from('files').select('name').eq('id', sp.f).eq('subject_id', id).single()
     const { data } = await supabase
       .from('outputs').select('content, lang, created_at').eq('file_id', sp.f).eq('kind', kind).maybeSingle()
     out = data
-    title = (file?.name ?? '').replace(/\.[^.]+$/, '')
+    const content = data?.content ?? ''
+    title = topicFrom(content) || (content ? await aiTopic(content) : '') || (file?.name ?? '').replace(/\.[^.]+$/, '') || 'Notes'
   }
-  if (!subject || !title || !out?.content) notFound()
+  if (!subject || !out?.content) notFound()
 
   const { t, lang } = await getI18n()
   const rtl = out.lang !== 'en'
@@ -68,20 +102,12 @@ export default async function PrintPage({
           building: lang === 'ar' ? 'جارٍ تجهيز الـPDF…' : 'Preparing the PDF…',
         }}
       >
+        {/* Cover: only the topic, with a small brand mark to keep the attribution. */}
         <section className="doc-cover">
-          <div className="cover-band">
-            <Logo size={88} />
-            <div className="cover-brand">Ryan Notes</div>
-            <div className="cover-kind">{kindLabel}</div>
+          <div className="cover-mark">Ryan Notes</div>
+          <div className="cover-topic">
             <h1 className="doc-title"><BidiText text={title} /></h1>
           </div>
-          <div className="cover-meta">
-            <div><span>Subject</span><b className="doc-subject"><BidiText text={subject.name} /></b></div>
-            <div><span>Date</span><b>{fmtDate(out.created_at, 'en')}</b></div>
-            <div><span>Language</span><b>{LANG_NAME[out.lang] ?? 'Arabic'}</b></div>
-          </div>
-          <div className="cover-rule" />
-          <div className="cover-foot">Study notes generated with Ryan Notes — review them against your textbooks and your doctor's guidance before exams.</div>
         </section>
 
         {items.length > 0 && (

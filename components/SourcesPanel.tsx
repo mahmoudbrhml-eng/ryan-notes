@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { compressMedia } from '@/lib/compress'
 import { deleteFile } from '@/app/subjects/[id]/actions'
 import Icon, { type IconName } from './Icon'
 import Menu from './Menu'
@@ -12,9 +13,22 @@ import ConfirmButton from './ConfirmButton'
 import type { Dict } from '@/lib/dict'
 
 export type SrcFile = { id: string; name: string; sub: string; icon: IconName }
-type Pending = { key: string; name: string; state: 'uploading' | 'done' | 'error'; error?: string }
+type Pending = {
+  key: string
+  name: string
+  state: 'tooling' | 'compressing' | 'uploading' | 'done' | 'error'
+  error?: string
+  pct?: number
+}
 
-const MAX_BYTES = 50 * 1024 * 1024
+// Inputs up to 1GB are accepted. Audio/video above COMPRESS_ABOVE is compressed
+// in the browser (lib/compress) before it is sent to storage.
+const MAX_BYTES = 1024 * 1024 * 1024
+const COMPRESS_ABOVE = 45 * 1024 * 1024
+
+const isMedia = (f: File) =>
+  /^(audio|video)\//.test(f.type) ||
+  /\.(mp3|m4a|wav|ogg|oga|aac|flac|mp4|webm|mov|mkv|avi|3gp|amr|opus|wma)$/i.test(f.name)
 
 export default function SourcesPanel({
   subjectId, userId, files, activeId, hideOnMobile, t,
@@ -49,8 +63,8 @@ export default function SourcesPanel({
     const supabase = createClient()
     const items: Pending[] = list.map((f) => ({ key: crypto.randomUUID(), name: f.name, state: 'uploading' }))
     setPending((p) => [...items, ...p])
-    const mark = (key: string, state: Pending['state'], error?: string) =>
-      setPending((p) => p.map((x) => (x.key === key ? { ...x, state, error } : x)))
+    const mark = (key: string, state: Pending['state'], error?: string, pct?: number) =>
+      setPending((p) => p.map((x) => (x.key === key ? { ...x, state, error, pct } : x)))
 
     for (let i = 0; i < list.length; i++) {
       const file = list[i]
@@ -59,19 +73,34 @@ export default function SourcesPanel({
         mark(key, 'error', t.upload.tooBig)
         continue
       }
+      // Big audio/video is compressed to a small mono MP3 before it leaves the device.
+      let upFile = file
+      if (isMedia(file) && file.size > COMPRESS_ABOVE) {
+        try {
+          const r = await compressMedia(
+            file,
+            (pct) => mark(key, 'compressing', undefined, pct),
+            () => mark(key, 'tooling'),
+          )
+          if (r.file !== file) upFile = r.file
+        } catch {
+          upFile = file // compression is best-effort; the bucket accepts the original up to 1GB
+        }
+      }
       const fileId = crypto.randomUUID()
-      const safe = file.name.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
+      const finalName = upFile === file ? file.name : `${file.name.replace(/\.[^.]+$/, '')}.mp3`
+      const safe = finalName.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
       const path = `${userId}/${subjectId}/${fileId}-${safe}`
       const { error: upErr } = await supabase.storage
         .from('lecture-files')
-        .upload(path, file, { contentType: file.type || undefined, upsert: false })
+        .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
       if (upErr) {
         mark(key, 'error', upErr.message)
         continue
       }
       const { error: dbErr } = await supabase.from('files').insert({
         id: fileId, subject_id: subjectId, name: file.name, storage_path: path,
-        mime: file.type || null, size_bytes: file.size,
+        mime: upFile.type || null, size_bytes: upFile.size,
       })
       if (dbErr) {
         await supabase.storage.from('lecture-files').remove([path])
@@ -185,7 +214,13 @@ export default function SourcesPanel({
               <span className="min-w-0 flex-1">
                 <span dir="auto" className="block truncate text-sm font-semibold">{p.name}</span>
                 <span className={`text-xs ${p.state === 'error' ? 'text-danger' : 'muted'}`} dir="auto">
-                  {p.state === 'error' ? `${t.src.failed}: ${p.error ?? ''}` : t.src.uploading}
+                  {p.state === 'error'
+                    ? `${t.src.failed}: ${p.error ?? ''}`
+                    : p.state === 'compressing'
+                      ? `${t.src.compressing} ${p.pct ?? 0}%`
+                      : p.state === 'tooling'
+                        ? t.src.prepTool
+                        : t.src.uploading}
                 </span>
               </span>
               {p.state === 'error' && (

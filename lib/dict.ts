@@ -43,9 +43,9 @@ export const en = {
   },
   upload: {
     drop: 'Drag files here or click to choose',
-    hint: 'PDF · DOCX · PPTX · TXT · Images · Audio (up to 50MB each)',
+    hint: 'PDF · DOCX · PPTX · TXT · Images · Audio (up to 1GB — big files are compressed automatically)',
     uploading: 'Uploading {i} of {n}…',
-    tooBig: 'larger than 50MB',
+    tooBig: 'larger than 1GB',
   },
   ai: {
     transcribe: 'Transcribe', makeNotes: 'Make notes', notesLang: 'Notes language',
@@ -95,6 +95,7 @@ export const en = {
     textTitle: 'Title', textBody: 'Paste your text here', linkLabel: 'Link', add: 'Add', cancel: 'Cancel',
     linkHint: 'YouTube links are read by the AI directly (beta). Websites are saved as text.',
     uploading: 'Uploading…', failed: 'Failed', dismiss: 'Dismiss', adding: 'Adding…',
+    compressing: 'Compressing…', prepTool: 'Preparing the compressor (first time only)…',
     select: 'Select', selected: '{n} selected', done: 'Done',
   },
   errors: {
@@ -185,9 +186,9 @@ export const ar: Dict = {
   },
   upload: {
     drop: 'اسحب الملفات هنا أو اضغط للاختيار',
-    hint: 'PDF · DOCX · PPTX · TXT · صور · صوت (حتى 50MB للملف)',
+    hint: 'PDF · DOCX · PPTX · TXT · صور · صوت (لحد 1 جيجا — الملفات الكبيرة بتتضغط أوتوماتيك)',
     uploading: 'جارٍ رفع {i} من {n}…',
-    tooBig: 'أكبر من 50MB',
+    tooBig: 'أكبر من 1 جيجا',
   },
   ai: {
     transcribe: 'تفريغ', makeNotes: 'اعمل ملاحظات', notesLang: 'لغة الملاحظات',
@@ -237,6 +238,7 @@ export const ar: Dict = {
     textTitle: 'العنوان', textBody: 'الصق النص هنا', linkLabel: 'الرابط', add: 'إضافة', cancel: 'إلغاء',
     linkHint: 'روابط يوتيوب بيقراها الذكاء الاصطناعي مباشرة (تجريبي). المواقع بتتحفظ كنص.',
     uploading: 'جارٍ الرفع…', failed: 'فشل', dismiss: 'إخفاء', adding: 'جارٍ الإضافة…',
+    compressing: 'جارٍ الضغط…', prepTool: 'بنجهّز أداة الضغط (أول مرة بس)…',
     select: 'تحديد', selected: 'تم تحديد {n}', done: 'تم',
   },
   errors: {
