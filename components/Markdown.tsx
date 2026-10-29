@@ -15,9 +15,9 @@ export const slug = (s: string) =>
   s.trim().toLowerCase().replace(/[\s/\\#?%&=+.,;:!"'()[\]{}<>|*_`~^$@\u2066\u2069]+/g, '-').replace(/^-+|-+$/g, '')
 
 export function tocOf(md: string) {
-  return [...md.matchAll(/^(#{2,3})\s+(.+)$/gm)].map((m) => {
+  return [...md.matchAll(/^(#{2,3})\s+(.+)$/gm)].map((m, i) => {
     const text = m[2].replace(/[*_`]/g, '').trim()
-    return { level: m[1].length, text, id: slug(text) }
+    return { level: m[1].length, text, id: `h${i + 1}` }
   })
 }
 
@@ -66,14 +66,16 @@ export function BidiText({ text }: { text: string }) {
 }
 
 export default function Markdown({ children, dir }: { children: string; dir?: 'rtl' | 'ltr' }) {
+  // Headings get positional ids (h1, h2, ...) so the table of contents always links to the right place.
+  const n = { v: 0 }
   return (
     <div className="md" dir={dir}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeBidi]}
         components={{
-          h2: ({ children }) => <h2 id={slug(textOf(children))}>{children}</h2>,
-          h3: ({ children }) => <h3 id={slug(textOf(children))}>{children}</h3>,
+          h2: ({ children }) => <h2 id={`h${++n.v}`}>{children}</h2>,
+          h3: ({ children }) => <h3 id={`h${++n.v}`}>{children}</h3>,
           table: ({ children }) => (
             <div className="overflow-x-auto">
               <table>{children}</table>

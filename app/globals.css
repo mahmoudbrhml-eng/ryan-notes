@@ -128,12 +128,11 @@ body {
 .md code { background: var(--surface2); padding: 1px 6px; border-radius: 6px; }
 
 /* ---------- Printable document (PDF) ---------- */
-.doc { --fg:#111827; --muted:#4b5563; --line:#cfd6e2; --brand:#0b6f69; --brand-soft:#e0f3f1; --navy:#1b4278; --warn:#8a5a00; --warn-soft:#fff4d6; --surface:#fff; --surface2:#f3f5f8; background:#fff; color:#111827; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.doc { --fg:#111827; --muted:#4b5563; --line:#cfd6e2; --brand:#0b6f69; --brand-soft:#e0f3f1; --navy:#1b4278; --warn:#8a5a00; --warn-soft:#fff4d6; --surface:#fff; --surface2:#f3f5f8; background:#e9edf2; color:#111827; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .doc-page { max-width: 210mm; margin: 24px auto; background: #fff; box-shadow: 0 4px 30px rgba(0,0,0,.25); padding: 18mm 16mm; }
 .doc[dir="rtl"] .md :is(p, li, h1, h2, h3, h4, blockquote, td, th) { text-align: right; }
 .doc[dir="rtl"] .doc-toc li { text-align: right; }
 .doc-cover { min-height: 240mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; }
-@page { size: A4; margin: 16mm 14mm; @bottom-center { content: counter(page); font-size: 9pt; color: #6b7280; } }
 @media print {
   body { background: #fff !important; }
   .no-print { display: none !important; }
@@ -154,3 +153,12 @@ body {
 .doc .md th { background: #0b6f69; color: #fff; }
 .doc .md li { margin: 3px 0; }
 .doc .md p, .doc .md li { orphans: 3; widows: 3; }
+
+.pagedjs_page { background: #fff; margin: 18px auto; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18); }
+.pagedjs_pages { padding: 8px 0 40px; }
+.doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media print {
+  .doc { background: #fff; }
+  .pagedjs_page { box-shadow: none; margin: 0; }
+  .pagedjs_pages { padding: 0; }
+}

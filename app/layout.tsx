@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Cairo } from 'next/font/google'
 import './globals.css'
+import JobsProvider from '@/components/Jobs'
 import { getI18n } from '@/lib/i18n'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { lang, dir, theme } = await getI18n()
+  const { lang, dir, theme, t } = await getI18n()
   return (
     <html
       lang={lang}
@@ -20,7 +21,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-theme={theme === 'system' ? undefined : theme}
       className={`${inter.variable} ${cairo.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <JobsProvider labels={{ ai: t.ai, errors: t.errors }}>{children}</JobsProvider>
+      </body>
     </html>
   )
 }

@@ -1,10 +1,18 @@
 import { notFound } from 'next/navigation'
-import AutoPrint from '@/components/AutoPrint'
 import Logo from '@/components/Logo'
 import Markdown, { BidiText, tocOf } from '@/components/Markdown'
+import PagedDoc from '@/components/PagedDoc'
 import { getI18n } from '@/lib/i18n'
 import { fmtDate } from '@/lib/format'
 import { createClient } from '@/lib/supabase/server'
+
+// The contents page is always in English: keep only the English part of each heading.
+function englishOnly(s: string) {
+  const runs = s.match(/[A-Za-z][A-Za-z0-9 ,'’\-–/&%+.:]*[A-Za-z0-9]/g)
+  return runs ? runs.map((r) => r.trim()).join(' — ') : s
+}
+
+const LANG_NAME: Record<string, string> = { ar: 'Egyptian Arabic', fa: 'Formal Arabic', en: 'English' }
 
 export default async function PrintPage({
   params,
@@ -18,6 +26,7 @@ export default async function PrintPage({
   const kind = sp.k === 'summary' ? 'summary' : sp.k === 'merged' ? 'merged' : 'transcript'
   const supabase = await createClient()
   const { data: subject } = await supabase.from('subjects').select('name').eq('id', id).single()
+
   let title = ''
   let out: { content: string | null; lang: string; created_at: string } | null = null
   if (kind === 'merged') {
@@ -38,43 +47,64 @@ export default async function PrintPage({
 
   const { t, lang } = await getI18n()
   const rtl = out.lang !== 'en'
-  const toc = tocOf(out.content)
+  const kindLabel = kind === 'merged' ? 'Combined notes' : kind === 'summary' ? 'Summary' : 'Lecture notes'
+
+  let n2 = 0
+  let n3 = 0
+  const items = tocOf(out.content).map((h) => {
+    if (h.level === 2) {
+      n3 = 0
+      return { ...h, num: `${++n2}.`, label: englishOnly(h.text) }
+    }
+    return { ...h, num: `${n2}.${++n3}`, label: englishOnly(h.text) }
+  })
 
   return (
     <div className="doc min-h-screen" dir={rtl ? 'rtl' : 'ltr'}>
-      <AutoPrint
+      <PagedDoc
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
-        labels={{ print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back }}
-      />
-      <div className="doc-page">
+        labels={{
+          print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back,
+          building: lang === 'ar' ? 'جارٍ تجهيز الـPDF…' : 'Preparing the PDF…',
+        }}
+      >
         <section className="doc-cover">
-          <Logo size={120} />
-          <p style={{ color: '#0b6f69', fontWeight: 700, letterSpacing: '.04em' }}>Ryan Notes</p>
-          <h1 dir={rtl ? 'rtl' : 'ltr'} style={{ fontSize: '30pt', fontWeight: 800, lineHeight: 1.25, maxWidth: '150mm' }}><BidiText text={title} /></h1>
-          <p style={{ fontSize: '14pt', color: '#4b5563' }}>{kind === 'merged' ? t.tools.merged : t.tools[kind]}</p>
-          <div style={{ marginTop: 24, color: '#4b5563', lineHeight: 2 }}>
-            <p><b>{t.pdf.subject}:</b> <BidiText text={subject.name} /></p>
-            <p><b>{t.pdf.date}:</b> {fmtDate(out.created_at, lang)}</p>
+          <div className="cover-band">
+            <Logo size={84} />
+            <div className="cover-brand">Ryan Notes</div>
+            <div className="cover-kind">{kindLabel}</div>
+            <h1 className="doc-title"><BidiText text={title} /></h1>
           </div>
+          <div className="cover-meta">
+            <div><span>Subject</span><b className="doc-subject"><BidiText text={subject.name} /></b></div>
+            <div><span>Date</span><b>{fmtDate(out.created_at, 'en')}</b></div>
+            <div><span>Language</span><b>{LANG_NAME[out.lang] ?? 'Arabic'}</b></div>
+          </div>
+          <div className="cover-foot">Study notes generated with Ryan Notes. Verify against your textbooks and doctors.</div>
         </section>
 
-        {toc.length > 0 && (
+        {items.length > 0 && (
           <section className="doc-toc">
-            <h2 style={{ fontSize: '20pt', fontWeight: 800, color: '#0b6f69', marginBottom: 16 }}>{t.pdf.contents}</h2>
-            <ul style={{ listStyle: 'none', padding: 0, lineHeight: 2.1 }}>
-              {toc.map((h, i) => (
-                <li key={i} style={{ paddingInlineStart: h.level === 3 ? 24 : 0, fontWeight: h.level === 2 ? 700 : 400, textAlign: rtl ? 'right' : 'left' }}>
-                  <BidiText text={h.text} />
+            <h2 className="toc-title">Contents</h2>
+            <ol>
+              {items.map((h) => (
+                <li key={h.id} className={`l${h.level}`}>
+                  <a className="t" href={`#${h.id}`}>
+                    <span className="num">{h.num}</span>
+                    {h.label}
+                  </a>
+                  <span className="dots" />
+                  <a className="pg" href={`#${h.id}`} />
                 </li>
               ))}
-            </ul>
+            </ol>
           </section>
         )}
 
-        <article>
+        <article className="doc-body">
           <Markdown dir={rtl ? 'rtl' : 'ltr'}>{out.content}</Markdown>
         </article>
-      </div>
+      </PagedDoc>
     </div>
   )
 }
