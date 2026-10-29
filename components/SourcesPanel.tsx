@@ -21,12 +21,12 @@ type Pending = {
   pct?: number
 }
 
-// Inputs up to 1GB are accepted. Audio/video above COMPRESS_ABOVE is compressed
-// in the browser (lib/compress) before it is sent to storage. The storage bucket
-// itself rejects anything above 50MB, so a failed compression is never uploaded.
+// Inputs up to 1GB are accepted (that is the bucket's own per-file limit).
+// Audio/video above COMPRESS_ABOVE is compressed in the browser (lib/compress)
+// before upload. Compression is best-effort: if it fails on a device, the
+// original file is uploaded as-is — the bucket takes up to 1GB.
 const MAX_BYTES = 1024 * 1024 * 1024
 const COMPRESS_ABOVE = 45 * 1024 * 1024
-const STORE_LIMIT = 50 * 1024 * 1024
 
 const isMedia = (f: File) =>
   /^(audio|video)\//.test(f.type) ||
@@ -75,7 +75,9 @@ export default function SourcesPanel({
         mark(key, 'error', t.upload.tooBig)
         continue
       }
-      // Big audio/video is compressed to a small mono MP3 before it leaves the device.
+      // Big audio/video is compressed to a small mono MP3 before it leaves the
+      // device. If the compressor fails on this device we still upload the
+      // original: the bucket accepts files up to 1GB.
       let upFile = file
       if (isMedia(file) && file.size > COMPRESS_ABOVE) {
         try {
@@ -86,18 +88,8 @@ export default function SourcesPanel({
           )
           if (r.file !== file) upFile = r.file
         } catch {
-          // Compression failed on this device. Uploading the original would only
-          // bounce off the 50MB bucket limit, so fail clearly instead.
-          if (file.size > STORE_LIMIT) {
-            mark(key, 'error', t.src.compressFail)
-            continue
-          }
           upFile = file
         }
-      }
-      if (upFile.size > STORE_LIMIT) {
-        mark(key, 'error', t.src.compressFail)
-        continue
       }
       const fileId = crypto.randomUUID()
       const finalName = upFile === file ? file.name : `${file.name.replace(/\.[^.]+$/, '')}.mp3`

@@ -270,7 +270,10 @@ async function handle(req: Request) {
     }
     const newParts = { ...old.parts }
     let total = old.total
-    if (kind === 'media' && /NO_MORE_AUDIO/.test(text)) total = i
+    // "No more audio" is only trusted when the ENTIRE reply is that token. If it
+    // merely appears inside a real transcript (the model mentioning it, or the
+    // reviewer echoing it), the whole tail of the lecture would be cut off.
+    if (kind === 'media' && /^\s*NO[\s_-]?MORE[\s_-]?AUDIO\.?\s*$/i.test(text)) total = i
     else newParts[String(i)] = cleanMarkdown(text)
 
     if (total === 0) {

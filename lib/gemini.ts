@@ -87,53 +87,75 @@ export async function generate(
   let quota = false
   let only404 = true
   let tooLarge = false
+  let retriedQuota = false
 
-  for (const ki of order) {
-    let skipKey = false
-    for (const m of models(!!o.light)) {
-      if (skipKey) break
-      let useThinking = true
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504, 'timeout')
-        const gc: Record<string, unknown> = { maxOutputTokens: o.max ?? 16000 }
-        if (o.json) gc.responseMimeType = 'application/json'
-        if (useThinking) {
-          if (m.startsWith('gemini-2.5')) gc.thinkingConfig = { thinkingBudget: 0 }
-          else if (m.startsWith('gemini-3')) gc.thinkingConfig = { thinkingLevel: 'low' }
-        }
-        let r: Response
-        try {
-          r = await fetch(`${G}v1beta/models/${m}:generateContent`, {
-            method: 'POST',
-            headers: { 'x-goog-api-key': ks[ki], 'content-type': 'application/json' },
-            body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }),
-            signal: AbortSignal.timeout(Math.max(2000, deadline - Date.now())),
-          })
-        } catch (e) {
-          last = e instanceof Error ? e.message : 'Network error'
-          only404 = false
+  // Free-tier keys exhaust their PER-MINUTE quota often; it refills within a
+  // minute. Instead of surfacing "AI is busy" to the student, wait once and
+  // retry the whole key/model cycle when every key came back 429.
+  while (true) {
+    let produced: string | null = null
+    for (const ki of order) {
+      if (produced) break
+      let skipKey = false
+      for (const m of models(!!o.light)) {
+        if (produced) break
+        if (skipKey) break
+        let useThinking = true
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (produced) break
+          if (Date.now() > deadline) throw new GeminiError('The AI took too long. Press Resume to try again.', 504, 'timeout')
+          const gc: Record<string, unknown> = { maxOutputTokens: o.max ?? 16000 }
+          if (o.json) gc.responseMimeType = 'application/json'
+          if (useThinking) {
+            if (m.startsWith('gemini-2.5')) gc.thinkingConfig = { thinkingBudget: 0 }
+            else if (m.startsWith('gemini-3')) gc.thinkingConfig = { thinkingLevel: 'low' }
+          }
+          let r: Response
+          try {
+            r = await fetch(`${G}v1beta/models/${m}:generateContent`, {
+              method: 'POST',
+              headers: { 'x-goog-api-key': ks[ki], 'content-type': 'application/json' },
+              body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }),
+              signal: AbortSignal.timeout(Math.max(2000, deadline - Date.now())),
+            })
+          } catch (e) {
+            last = e instanceof Error ? e.message : 'Network error'
+            only404 = false
+            break
+          }
+          const j = (await r.json().catch(() => ({}))) as GenResponse
+          if (r.ok) {
+            const t = (j.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? '').join('')
+            if (t) produced = t
+            else {
+              last = 'Empty answer'
+              only404 = false
+            }
+            break
+          }
+          last = j.error?.message ?? `HTTP ${r.status}`
+          if (r.status === 400 && /token|too large|exceed|payload/i.test(last) && !/think|API key/i.test(last)) tooLarge = true
+          if (r.status === 400 && useThinking && gc.thinkingConfig && /think/i.test(last)) {
+            useThinking = false
+            continue
+          }
+          if (r.status !== 404) only404 = false
+          if (r.status === 429) quota = true
+          if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(last))) skipKey = true
           break
         }
-        const j = (await r.json().catch(() => ({}))) as GenResponse
-        if (r.ok) {
-          const t = (j.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? '').join('')
-          if (t) return t
-          last = 'Empty answer'
-          only404 = false
-          break
-        }
-        last = j.error?.message ?? `HTTP ${r.status}`
-        if (r.status === 400 && /token|too large|exceed|payload/i.test(last) && !/think|API key/i.test(last)) tooLarge = true
-        if (r.status === 400 && useThinking && gc.thinkingConfig && /think/i.test(last)) {
-          useThinking = false
-          continue
-        }
-        if (r.status !== 404) only404 = false
-        if (r.status === 429) quota = true
-        if (r.status === 401 || r.status === 403 || (r.status === 400 && /API key/i.test(last))) skipKey = true
-        break
       }
     }
+    if (produced) return produced
+    if (quota && !retriedQuota && Date.now() < deadline - 30000) {
+      retriedQuota = true
+      quota = false
+      only404 = true
+      tooLarge = false
+      await sleep(25000)
+      continue
+    }
+    break
   }
   if (quota) throw new GeminiError('AI quota is used up right now. Wait a minute and press Resume.', 429, 'quota')
   if (tooLarge) throw new GeminiError('This content is too large for one AI request.', 413, 'too_large')

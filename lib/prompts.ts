@@ -43,8 +43,25 @@ export const summaryPrompt = (lang: NotesLang, md: string, length: 'short' | 'de
   `Turn these lecture notes into ${
     length === 'short'
       ? 'a very short exam-revision summary (at most 12 bullet points plus a 5-line "must remember" list)'
-      : 'a complete, well-organized revision document that keeps EVERY fact, definition, number, drug name and dose, classification, mnemonic, comparison and clinical pearl from the source. Tighten only the wording, never the information: nothing from the source may disappear. Target length is at least HALF the length of the source. Keep every markdown table (copy them fully, do not shrink them), keep all lists expanded item by item, and keep the "Doctor\'s Focus" lines as > blockquotes. Start with a 5-line "The lecture in one minute" overview, then the full structured note.'
-  } in markdown: key points, definitions, comparisons (use tables), and a "must remember" list at the end. Formatting rules: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, and put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
+      : `a COMPLETE revision booklet — a real study document, not a digest. Go through the source section by section, in the same order, and write one ## section per main topic. Every single fact must survive: definitions, numbers, percentages, drug names and doses, classifications, criteria, staging, mechanisms, side effects, contraindications, comparisons, examples, mnemonics, and every "> ⭐️ Doctor's Focus" line (keep them as > blockquotes under the right section). Rules:
+- Copy every markdown table in full — never shrink or merge tables.
+- Expand every list item by item, each with its own explanation sentence.
+- Under each heading write full explanatory sentences (as the lecturer explained them), never telegraphic fragments, and never compress several source sections into one short paragraph.
+- Target length: at least HALF the length of the source — covering everything properly will naturally reach it. If you notice a source section you have not written yet, keep going until it is all covered.`
+  } Start with "## The lecture in one minute" (max 6 bullets), then the full document, and end with "## Must remember" (10–20 bullets)${length === 'short' ? '' : ' plus a final "## High-yield for the exam" section collecting the Doctor\'s Focus points'}. Markdown only: never use LaTeX or dollar signs, use → for arrows, use markdown tables, no --- lines, no HTML tags, put key exam pearls in > blockquotes. ${LANG_NOTE[lang]}\n\n${md.slice(0, 300000)}`
+
+// Second pass that guarantees density: when the first detailed pass came back
+// too short, the model continues from where it stopped and writes ONLY the
+// sections that are still missing, so the final document covers the whole
+// lecture instead of a digest of its first pages.
+export const continueSummaryPrompt = (lang: NotesLang, written: string, src: string) =>
+  `You previously wrote a revision booklet from these lecture notes, but the booklet below is INCOMPLETE: several sections of the source are still missing. Write ONLY the missing content, in the source's order, starting from the first source section that is not covered yet. Do NOT repeat anything already written, do NOT write an introduction, do NOT rewrite the overview — output the missing ## / ### sections directly so they can be appended to the document. Same rules as before: every fact survives (numbers, doses, classifications, comparisons, examples), tables copied in full, lists expanded item by item, "> ⭐️ Doctor's Focus" lines kept as > blockquotes, full explanatory sentences under each heading. Markdown only: no LaTeX, no --- lines, no HTML. ${LANG_NOTE[lang]}
+
+--- THE BOOKLET SO FAR (already covered — do not repeat):
+${written.slice(-24000)}
+
+--- THE FULL SOURCE (write what is still missing from here):
+${src.slice(0, 300000)}`
 
 export type QuizLevel = 'easy' | 'medium' | 'hard'
 

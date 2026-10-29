@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Icon from './Icon'
 
-const MAX_BYTES = 50 * 1024 * 1024 // matches the bucket limit
+const MAX_BYTES = 1024 * 1024 * 1024 // matches the bucket limit
 
 type Labels = { drop: string; dropHint: string; uploading: string; tooBig: string }
 

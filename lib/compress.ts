@@ -47,14 +47,28 @@ declare global {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// A stalled CDN/engine download must never hang the upload forever: every
+// loading step races against a timeout and the next source is tried instead.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    sleep(ms).then(() => {
+      throw new Error('loading timed out')
+    }),
+  ])
+}
+
 function loadScript(src: string): Promise<void> {
-  return new Promise((ok, err) => {
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = () => ok()
-    s.onerror = () => err(new Error(`failed to load ${src}`))
-    document.head.appendChild(s)
-  })
+  return withTimeout(
+    new Promise((ok, err) => {
+      const s = document.createElement('script')
+      s.src = src
+      s.onload = () => ok()
+      s.onerror = () => err(new Error(`failed to load ${src}`))
+      document.head.appendChild(s)
+    }),
+    60000,
+  )
 }
 
 async function firstOK<T>(bases: string[], file: string, fn: (url: string) => Promise<T>): Promise<T> {
@@ -81,11 +95,14 @@ function getEngine(onStage?: (s: 'engine') => void): Promise<FFmpegLike> {
       if (!window.FFmpegUtil) throw new Error('util global missing')
       const { toBlobURL } = window.FFmpegUtil
       const ff = new window.FFmpegWASM.FFmpeg()
+      // The wasm core is ~31MB: allow several minutes on slow connections.
       const [coreURL, wasmURL] = await Promise.all([
-        firstOK(CORE_BASES, 'ffmpeg-core.js', (u) => toBlobURL(u, 'text/javascript')),
-        firstOK(CORE_BASES, 'ffmpeg-core.wasm', (u) => toBlobURL(u, 'application/wasm')),
+        firstOK(CORE_BASES, 'ffmpeg-core.js', (u) => withTimeout(toBlobURL(u, 'text/javascript'), 90000)),
+        firstOK(CORE_BASES, 'ffmpeg-core.wasm', (u) => withTimeout(toBlobURL(u, 'application/wasm'), 300000)),
       ])
-      const classWorkerURL = await firstOK(FFMPEG_BASES, '814.ffmpeg.js', (u) => toBlobURL(u, 'text/javascript'))
+      const classWorkerURL = await firstOK(FFMPEG_BASES, '814.ffmpeg.js', (u) =>
+        withTimeout(toBlobURL(u, 'text/javascript'), 60000),
+      )
       // The core is ~31MB; give it room on slow connections (2 tries total).
       for (let i = 0; ; i++) {
         try {
