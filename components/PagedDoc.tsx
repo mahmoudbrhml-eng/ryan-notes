@@ -24,13 +24,17 @@ export default function PagedDoc({
     ;(async () => {
       try {
         await (document.fonts?.ready ?? Promise.resolve())
-        const { Previewer } = await import('pagedjs')
+        // Vendored self-contained ESM build (see lib/vendor/paged.esm.js header):
+        // the package's src entry pulls legacy polyfills that break under Turbopack
+        // and silently kill pagination.
+        const { Previewer } = await import('@/lib/vendor/paged.esm.js')
         if (cancelled || !src.current || !out.current) return
         const frag = document.createDocumentFragment()
         Array.from(src.current.childNodes).forEach((n) => frag.appendChild(n.cloneNode(true)))
         await new Previewer().preview(frag, [{ 'doc.css': PRINT_CSS }], out.current)
         if (!cancelled) setState('ready')
-      } catch {
+      } catch (e) {
+        console.error('pagedjs failed:', e)
         if (cancelled) return
         const st = document.createElement('style')
         st.textContent = '@page { size: A4; margin: 16mm 14mm; }'

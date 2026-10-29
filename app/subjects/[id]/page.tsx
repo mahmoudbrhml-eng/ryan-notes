@@ -92,7 +92,7 @@ export default async function SubjectPage({
   const outName = (active?.name ?? '').replace(/\.[^.]+$/, '')
   const anyTranscript = outs.some((o) => o.kind === 'transcript')
   const href = (k: Tab, p: string) => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
-  const swipeHref = (p: 'sources' | 'notes' | 'studio') => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${tab}&p=${p}`
+  const swipeBase = `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${tab}`
   const pdfHref = (k: 'transcript' | 'summary') => `/subjects/${id}/print?f=${activeId}&k=${k}`
   const exportLabels = { copy: t.ai.copy, copied: t.ai.copied, md: t.ai.download, pdf: t.pdf.pdf }
   const langLabels = { ar: t.ai.langAr, en: t.ai.langEn, fa: t.ai.langFa }
@@ -154,7 +154,7 @@ export default async function SubjectPage({
   return (
     <AppShell title={subject.name} back={{ href: '/subjects', label: t.ws.back }}>
       <SelectionProvider>
-      <PanelSwipe current={panel} hrefFor={swipeHref} labels={{ next: t.ws.nextPanel, prev: t.ws.prevPanel }}>
+      <PanelSwipe current={panel} base={swipeBase} labels={{ next: t.ws.nextPanel, prev: t.ws.prevPanel }}>
       <div className="ws">
         <SourcesPanel
           subjectId={subject.id}

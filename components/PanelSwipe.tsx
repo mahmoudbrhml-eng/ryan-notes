@@ -13,18 +13,19 @@ type P = (typeof ORDER)[number]
 
 export default function PanelSwipe({
   current,
-  hrefFor,
+  base,
   labels,
   children,
 }: {
   current: string
-  hrefFor: (p: P) => string
+  base: string
   labels: { next: string; prev: string }
   children: ReactNode
 }) {
   const router = useRouter()
   const start = useRef<{ x: number; y: number } | null>(null)
   const lock = useRef(false)
+  const hrefFor = (p: P) => `${base}&p=${p}`
 
   const go = (dir: 1 | -1) => {
     const i = ORDER.indexOf(current as P)
