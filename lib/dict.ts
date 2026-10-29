@@ -115,6 +115,9 @@ export const en = {
     print: 'Download PDF', hint: 'The PDF file downloads automatically when it is ready — no print dialog.',
     again: 'Download again', save: 'Print (paper)', saved: 'PDF downloaded ✓',
     back: 'Back', pdf: 'PDF', building: 'Building your PDF…',
+    upgrading: 'Upgrading the old summary to the full version…',
+    upgradeHint: 'One time only: the stored summary was too brief, so the AI is rewriting it as a complete revision booklet (2–5 minutes). Keep this page open — the full PDF downloads by itself when it is done.',
+    upgradeFail: 'Could not upgrade right now — the current version is shown instead. Try again later.',
   },
   login: {
     tagline: 'Study smarter, one lecture at a time.',
@@ -260,6 +263,9 @@ export const ar: Dict = {
     print: 'تنزيل PDF', hint: 'ملف الـPDF هينزل عندك أوتوماتيك أول ما يجهز — من غير نافذة طباعة.',
     again: 'تنزيل تاني', save: 'طباعة (ورق)', saved: 'اتنزّل الـPDF ✓',
     back: 'رجوع', pdf: 'PDF', building: 'بنجهّز الـPDF بتاعك…',
+    upgrading: 'بنطوّر الملخص القديم للنسخة الكاملة…',
+    upgradeHint: 'مرة واحدة بس: الملخص المخزّن كان مختصر أوي، فالذكاء الاصطناعي بيكتبه من جديد ككتيّب مراجعة كامل (من ٢ لـ ٥ دقايق). سيب الصفحة مفتوحة — الـPDF الكامل هينزل لوحده أول ما يخلص.',
+    upgradeFail: 'معرفناش نطوّره دلوقتي — هنعرض النسخة الموجودة بدلها. جرّب تاني بعدين.',
   },
   login: {
     tagline: 'ذاكر بذكاء، محاضرة محاضرة.',

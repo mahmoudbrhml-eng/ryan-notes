@@ -2,9 +2,15 @@ import { notFound } from 'next/navigation'
 import { Fragment } from 'react'
 import Markdown, { tocOf } from '@/components/Markdown'
 import PagedDoc from '@/components/PagedDoc'
+import AutoUpgrade from '@/components/AutoUpgrade'
 import { getI18n } from '@/lib/i18n'
 import { generate } from '@/lib/gemini'
 import { createClient } from '@/lib/supabase/server'
+
+// Same bar as the summary API: a detailed booklet must be substantial relative
+// to its source. Older stored summaries (written before the dense pipeline)
+// sit far below it — those get auto-upgraded when the user opens the PDF.
+const minDetailed = (srcLen: number) => Math.max(6000, Math.min(30000, Math.floor(srcLen * 0.4)))
 
 // The contents page is always in English: keep only the English part of each heading.
 function englishOnly(s: string) {
@@ -81,7 +87,8 @@ export default async function PrintPage({
   const { data: subject } = await supabase.from('subjects').select('name').eq('id', id).single()
 
   let title = ''
-  let out: { content: string | null; lang: string; created_at: string } | null = null
+  let out: { content: string | null; lang: string; created_at: string; summary_kind?: string | null } | null = null
+  let upgradeFileId = ''
   if (kind === 'merged') {
     if (!sp.m) notFound()
     const { data } = await supabase
@@ -92,8 +99,19 @@ export default async function PrintPage({
     if (!sp.f) notFound()
     const { data: file } = await supabase.from('files').select('name').eq('id', sp.f).eq('subject_id', id).single()
     const { data } = await supabase
-      .from('outputs').select('content, lang, created_at').eq('file_id', sp.f).eq('kind', kind).maybeSingle()
+      .from('outputs').select('content, lang, created_at, summary_kind').eq('file_id', sp.f).eq('kind', kind).maybeSingle()
     out = data
+    // A summary that is thin next to its own transcript was written by the old
+    // lossy pipeline. Never touch a deliberate 'short' summary — only legacy or
+    // failed detailed runs.
+    if (kind === 'summary' && data?.content) {
+      const { data: tr } = await supabase
+        .from('outputs').select('content').eq('file_id', sp.f).eq('kind', 'transcript').maybeSingle()
+      const trLen = tr?.content?.length ?? 0
+      if (trLen > 3000 && (data.summary_kind ?? null) !== 'short' && data.content.length < minDetailed(trLen)) {
+        upgradeFileId = sp.f
+      }
+    }
     const content = data?.content ?? ''
     title = topicFrom(content) || (content ? await aiTopic(content) : '') || (file?.name ?? '').replace(/\.[^.]+$/, '') || 'Notes'
   }
@@ -115,6 +133,11 @@ export default async function PrintPage({
 
   return (
     <div className="doc min-h-screen bg-surface2" dir={rtl ? 'rtl' : 'ltr'}>
+      <AutoUpgrade
+        enabled={!!upgradeFileId}
+        fileId={upgradeFileId}
+        labels={{ upgrading: t.pdf.upgrading, hint: t.pdf.upgradeHint, fail: t.pdf.upgradeFail }}
+      >
       <PagedDoc
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
         filename={`${title}.pdf`}
@@ -157,6 +180,7 @@ export default async function PrintPage({
           <Markdown dir={rtl ? 'rtl' : 'ltr'}>{out.content}</Markdown>
         </article>
       </PagedDoc>
+      </AutoUpgrade>
     </div>
   )
 }

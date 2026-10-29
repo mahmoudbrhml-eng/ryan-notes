@@ -76,10 +76,11 @@ export async function POST(req: Request) {
 
     const { data: existing } = await supabase
       .from('outputs').select('id').eq('file_id', fileId).eq('kind', 'summary').maybeSingle()
-    if (existing) await supabase.from('outputs').update({ content: text, lang }).eq('id', existing.id)
+    if (existing) await supabase.from('outputs').update({ content: text, lang, summary_kind: length }).eq('id', existing.id)
     else
       await supabase.from('outputs').insert({
         subject_id: tr.subject_id, file_id: fileId, kind: 'summary', title: tr.title, lang, content: text,
+        summary_kind: length,
       })
     return NextResponse.json({ ok: true })
   } catch (e) {
