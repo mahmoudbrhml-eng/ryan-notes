@@ -55,15 +55,19 @@ function useNav({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON' || el.isContentEditable)) return
+      // Arrows must keep working even when an option button holds focus (the
+      // normal state right after answering) — only text fields swallow them.
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      const onButton = !!el && (el.tagName === 'BUTTON' || el.tagName === 'SELECT')
       const fwd = rtl ? 'ArrowLeft' : 'ArrowRight'
       const back = rtl ? 'ArrowRight' : 'ArrowLeft'
       if (e.key === fwd || e.key === 'ArrowDown' || e.key === 'Enter') {
+        if (onButton && e.key === 'Enter') return // Enter keeps its native button role
         if (onNext()) e.preventDefault()
       } else if (e.key === back || e.key === 'ArrowUp') {
         onPrev()
         e.preventDefault()
-      } else if (onDigit && digitCount && /^[1-9]$/.test(e.key)) {
+      } else if (onDigit && digitCount && !onButton && /^[1-9]$/.test(e.key)) {
         const i = Number(e.key) - 1
         if (i < digitCount) {
           onDigit(i)
