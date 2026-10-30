@@ -54,6 +54,28 @@ function structureWalk(node: HNode, n: { v: number }) {
   }
 }
 
+// The PDF body is rendered by headless Chromium: keep it harmless by design.
+// Images only survive as embedded data URLs (no external fetches), and link
+// targets must be real web/mail links — everything else becomes inert.
+function sanitizeWalk(node: HNode) {
+  const kids = node.children
+  if (!kids) return
+  node.children = kids.filter((c) => {
+    if (c.type === 'element' && c.tagName === 'img') {
+      const src = String((c.properties as Record<string, unknown>)?.src ?? '')
+      return src.startsWith('data:image/')
+    }
+    return true
+  })
+  for (const c of node.children) {
+    if (c.type === 'element' && c.tagName === 'a') {
+      const href = String((c.properties as Record<string, unknown>)?.href ?? '')
+      if (!/^(https?:|mailto:|#)/i.test(href.trim())) c.properties = { ...c.properties, href: '#' }
+    }
+    sanitizeWalk(c)
+  }
+}
+
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
@@ -62,6 +84,7 @@ const processor = unified()
     const root = tree as unknown as HNode
     bidiWalk(root)
     structureWalk(root, { v: 0 })
+    sanitizeWalk(root)
   })
   .use(rehypeStringify)
   .freeze()

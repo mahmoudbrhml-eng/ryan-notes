@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ApiError, postJson } from '@/lib/client-api'
@@ -54,7 +54,7 @@ function Sel<T extends string | number>({
 }
 
 export default function StudioPanel({
-  subjectId, files, activeId, tab, generated, combos, activeCombo, mode, hideOnMobile, t,
+  subjectId, files, activeId, tab, generated, combos, activeCombo, hideOnMobile, t, children,
 }: {
   subjectId: string
   files: StudioFile[]
@@ -63,9 +63,9 @@ export default function StudioPanel({
   generated: { kind: 'transcript' | 'summary' | 'quiz'; date: string }[]
   combos: { id: string; title: string; date: string }[]
   activeCombo: string | null
-  mode: string
   hideOnMobile: boolean
   t: Dict
+  children?: ReactNode
 }) {
   const router = useRouter()
   const sel = useSelection()
@@ -93,8 +93,6 @@ export default function StudioPanel({
     return e instanceof Error ? e.message : t.errors.other
   }
   const tiles: { key: string; icon: IconName; label: string; to: string; current: boolean }[] = [
-    { key: 'chat', icon: 'spark', label: t.tools.chat, to: href('chat', 'notes'), current: tab === 'chat' && mode !== 'exam' },
-    { key: 'viva', icon: 'mic', label: t.tools.viva, to: `${href('chat', 'notes')}&mode=exam`, current: tab === 'chat' && mode === 'exam' },
     { key: 'transcript', icon: 'file', label: t.tools.transcript, to: href('transcript'), current: tab === 'transcript' },
     { key: 'summary', icon: 'sumry', label: t.tools.summary, to: href('summary'), current: tab === 'summary' },
     { key: 'focus', icon: 'star', label: t.tools.focus, to: href('focus'), current: tab === 'focus' },
@@ -152,7 +150,7 @@ export default function StudioPanel({
         job: mjob,
       })
       sel.clear()
-      router.push(`/subjects/${subjectId}?tab=combo&m=${r.id}&p=notes`)
+      router.push(`/subjects/${subjectId}?tab=combo&m=${r.id}&p=studio`)
     } catch (e) {
       setErr({ fileId: null, text: friendly(e) })
     } finally {
@@ -168,8 +166,8 @@ export default function StudioPanel({
     setErr(null)
     try {
       await postJson(`/api/ai/${kind}`, kind === 'summary' ? { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, length, custom: customText } : { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, count, level, custom: customText })
-      // Only jump to the result if you are still looking at the same source.
-      if (activeRef.current === fid) router.push(`/subjects/${subjectId}?f=${fid}&tab=${tab === 'flash' ? 'flash' : kind}&p=notes`)
+      // Stay in the Studio: the result appears right below the controls.
+      if (activeRef.current === fid) router.push(`/subjects/${subjectId}?f=${fid}&tab=${tab === 'flash' ? 'flash' : kind}&p=studio`)
     } catch (e) {
       setErr({ fileId: fid, text: friendly(e) })
     } finally {
@@ -257,7 +255,7 @@ export default function StudioPanel({
             </div>
 
             {tab === 'overview' && <p className="muted text-xs leading-5">{t.ws.pickTool}</p>}
-            {tab === 'chat' && <p className="muted text-xs leading-5">{mode === 'exam' ? t.studio.vivaInfo : t.studio.chatInfo}</p>}
+            {tab === 'chat' && <p className="muted text-xs leading-5">{t.studio.chatInfo}</p>}
             {tab === 'focus' && <p className="muted text-xs leading-5">{t.studio.focusInfo}</p>}
 
             {tab === 'transcript' &&
@@ -325,6 +323,12 @@ export default function StudioPanel({
         )}
         {shownError && <p role="alert" dir="auto" className="text-xs leading-5 text-danger">{shownError}</p>}
       </div>
+
+      {/* The result itself, right here in the Studio: opening any deliverable
+          (quiz, flashcards, notes…) keeps you in this panel on phones instead
+          of bouncing you to another tab. On desktop the wide middle panel
+          already shows it, so this copy only exists below 1100px. */}
+      {children && <div className="hidden max-[1099px]:flex flex-col gap-3">{children}</div>}
 
       {generated.length > 0 && (
         <div>

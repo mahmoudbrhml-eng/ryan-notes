@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { PRINT_CSS } from '@/lib/printCss'
@@ -13,7 +13,11 @@ import type { Browser } from 'puppeteer-core'
 // client preview (Paged.js engine) and prints it with page.pdf() — the output
 // is a real, selectable, OCR-ready PDF with perfect Arabic shaping. The client
 // falls back to its image pipeline only if this whole route fails.
-export const maxDuration = 60
+// Headless Chromium is the heaviest thing this app runs: cap each account at
+// a sane number of server PDFs per hour (the client-side fallback still works
+// when this answers 429, so users are never blocked from exporting).
+const HOURLY_PDF_CAP = 30
+export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
 declare global {
@@ -63,10 +67,19 @@ export async function POST(req: Request) {
     const { data: claims } = await supabase.auth.getClaims()
     uid = claims?.claims?.sub ?? null
     if (!uid) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const owner: string = uid
 
     const b = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const kind = b.kind === 'summary' ? 'summary' : b.kind === 'merged' ? 'merged' : 'transcript'
     doc = kind
+
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString()
+    const { count: recent } = await supabase
+      .from('pdf_renders').select('id', { count: 'exact', head: true })
+      .eq('user_id', owner).gte('created_at', hourAgo)
+    if (typeof recent === 'number' && recent >= HOURLY_PDF_CAP) {
+      return NextResponse.json({ error: 'too many PDFs this hour, try again later' }, { status: 429 })
+    }
 
     let content = ''
     let lang = 'ar'
@@ -106,17 +119,17 @@ export async function POST(req: Request) {
       defaultViewport: { width: 1240, height: 1754 },
     })
     const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'load', timeout: 30000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 25000 })
     // The vendored Paged.js build is ESM; inject it as an inline module and wait
     // for it to expose the Previewer before paginating.
     await page.addScriptTag({ content: `${lazyPaged()}\nwindow.__Previewer = Previewer;`, type: 'module' })
-    await page.waitForFunction('window.__Previewer !== undefined', { timeout: 15000, polling: 100 })
+    await page.waitForFunction('window.__Previewer !== undefined', { timeout: 12000, polling: 100 })
 
     let stat: Stat
     try {
       stat = await Promise.race([
         page.evaluate((css: string) => window.__paginate!(css), PRINT_CSS),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('pagination timed out')), 40000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('pagination timed out')), 35000)),
       ])
       const complete = stat.pages > 0 && (stat.srcLen <= 1500 || stat.outLen >= stat.srcLen * 0.92)
       if (!complete) throw new Error(`incomplete render: ${stat.pages} pages, ${stat.outLen}/${stat.srcLen} chars`)
@@ -142,7 +155,9 @@ export async function POST(req: Request) {
     const cleaned = await fixArabicTextLayer(new Uint8Array(pdf))
 
     const ascii = safePdfName(title).replace(/[^\x20-\x7E]/g, '') || 'ryan-notes'
-    void report(uid, doc, mode, pages, srcLen, outLen, Date.now() - t0, true, null, req.headers.get('user-agent') ?? '')
+    // Telemetry runs after the response so the download never waits on it and
+    // the row cannot be lost to a frozen function.
+    after(() => report(owner, doc, mode, pages, srcLen, outLen, Date.now() - t0, true, null, req.headers.get('user-agent') ?? ''))
 
     return new NextResponse(cleaned as unknown as BodyInit, {
       headers: {
@@ -153,7 +168,7 @@ export async function POST(req: Request) {
     })
   } catch (e) {
     errMsg = e instanceof Error ? e.message.slice(0, 160) : 'unknown'
-    if (uid) void report(uid, doc, mode, pages, srcLen, outLen, Date.now() - t0, false, errMsg, req.headers.get('user-agent') ?? '')
+    if (uid) { const failed: string = uid; after(() => report(failed, doc, mode, pages, srcLen, outLen, Date.now() - t0, false, errMsg, req.headers.get('user-agent') ?? '')) }
     return NextResponse.json({ error: 'pdf build failed', detail: errMsg }, { status: 500 })
   } finally {
     if (browser) await browser.close().catch(() => {})

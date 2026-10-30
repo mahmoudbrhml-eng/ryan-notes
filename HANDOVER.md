@@ -75,7 +75,7 @@
 - **تحديث الموقع:** ارفع الملفات المعدلة على GitHub (Add file ← Upload files ← Commit). Vercel ينشر خلال دقيقة.
 - **التراجع:** Vercel ← Deployments ← اختر نسخة سابقة ← Instant Rollback.
 - **تغيير مفتاح Gemini:** حدّث `GEMINI_API_KEYS` ثم Redeploy.
-- **قاعدة البيانات:** ملفات SQL (`01_schema.sql`, `02_step5.sql`) تُشغَّل مرة واحدة في Supabase ← SQL Editor.
+- **قاعدة البيانات:** ملفات SQL في مجلد `sql/` (`02_step5.sql` الجداول الأساسية، `03_step9.sql`، `04_step10.sql`، `05_pdf_renders.sql`، و`06_usage_guard.sql` حماية عدّاد الاستخدام) — تُشغَّل مرة واحدة بالترتيب في Supabase ← SQL Editor.
 
 ## 8) حدود معروفة
 - **حساب اختبار:** `zai-e2e@study.local` حساب e2e للتشخيص (معاه مادة "جراحة عامة — Round 3"). الباسورد بيتظبط من SQL وقت الحاجة (`crypt('...', gen_salt('bf'))`) — مش متكتب في أي ملف. لو الدخول رجّع "Database error querying schema": اتأكد إن صف `auth.identities` موجود وحقول التوكنز في `auth.users` فاضية ("") مش NULL.

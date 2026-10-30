@@ -162,7 +162,33 @@ export default function SourcesPanel({
 
       {sel.mode && (
         <div className="flex items-center justify-between rounded-2xl bg-brand-soft px-3 py-2 text-sm font-semibold text-brand">
-          <span>{t.src.selected.replace('{n}', String(sel.selected.length))}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            {/* Select-all tick, like the file-picker pattern: one tap marks
+                every source (or clears them all when everything is ticked). */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={files.length > 0 && files.every((f) => sel.selected.includes(f.id))}
+              aria-label={t.src.selectAll}
+              onClick={() =>
+                files.length > 0 && files.every((f) => sel.selected.includes(f.id))
+                  ? sel.clear()
+                  : sel.setAll(files.map((f) => f.id))
+              }
+              className="grid !h-7 !w-7 shrink-0 place-items-center rounded-lg hover:bg-white/40"
+            >
+              <span
+                className={`grid h-[18px] w-[18px] place-items-center rounded-md border transition-colors ${
+                  files.length > 0 && files.every((f) => sel.selected.includes(f.id))
+                    ? 'border-brand bg-brand text-brand-fg'
+                    : 'border-brand/50 bg-transparent'
+                }`}
+              >
+                {files.length > 0 && files.every((f) => sel.selected.includes(f.id)) && <Icon name="check" className="h-3 w-3" />}
+              </span>
+            </button>
+            <span className="truncate">{t.src.selected.replace('{n}', String(sel.selected.length))}</span>
+          </span>
           <button type="button" className="btn btn-sm !px-3" onClick={sel.clear}>{t.src.done}</button>
         </div>
       )}

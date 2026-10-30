@@ -7,10 +7,11 @@ type Ctx = {
   mode: boolean
   toggle: (id: string) => void
   start: (id: string) => void
+  setAll: (ids: string[]) => void
   clear: () => void
 }
 
-const C = createContext<Ctx>({ selected: [], mode: false, toggle: () => {}, start: () => {}, clear: () => {} })
+const C = createContext<Ctx>({ selected: [], mode: false, toggle: () => {}, start: () => {}, setAll: () => {}, clear: () => {} })
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const [selected, setSelected] = useState<string[]>([])
@@ -21,6 +22,7 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     mode: selected.length > 0,
     toggle: (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])),
     start: (id) => setSelected((s) => (s.includes(id) ? s : [...s, id])),
+    setAll: (ids) => setSelected(ids),
     clear: () => setSelected([]),
   }
   return <C.Provider value={value}>{children}</C.Provider>

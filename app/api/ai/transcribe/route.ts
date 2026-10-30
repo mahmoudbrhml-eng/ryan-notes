@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, apiKeys, generate, uploadFile, type GeminiPart } from '@/lib/gemini'
 import { SYS, reviewPrompt, type NotesLang } from '@/lib/prompts'
@@ -120,8 +120,12 @@ async function handle(req: Request) {
 
   const plist = normalizeParts(file.parts, file.storage_path, file.name)
 
-  const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'transcribe' })
-  if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+  // Fail closed: if the usage check itself errors, no AI call goes out.
+  const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'transcribe' })
+  if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
+  if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+  // Any failed AI step below gives the call back instead of charging it.
+  const refund = () => after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'transcribe' }) } catch {} })
 
   const { data: out } = await supabase
     .from('outputs')
@@ -299,6 +303,7 @@ async function handle(req: Request) {
       await supabase.from('files').update({ ai_status: 'processing', ai_error: null }).eq('id', fileId)
       return NextResponse.json({ total, kind, done: Object.keys(parts).map(Number) })
     } catch (e) {
+      refund()
       await setError(e instanceof Error ? e.message : 'Failed to start')
       throw e
     }
@@ -346,6 +351,7 @@ async function handle(req: Request) {
       if (doneAll) await supabase.from('files').update({ ai_status: 'done', ai_error: null }).eq('id', fileId)
       return NextResponse.json({ ok: true, index: i, complete: doneAll })
     } catch (e) {
+      if (e instanceof GeminiError && e.code === 'quota') refund()
       await setError(e instanceof Error ? e.message : 'Failed')
       throw e
     }
@@ -442,6 +448,7 @@ async function handle(req: Request) {
         }
         return NextResponse.json({ error: 'Switching to another AI key…', code: 'retry', retry: true }, { status: 503 })
       }
+      refund()
       throw e
     }
     const newParts = { ...old.parts }

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { summaryPrompt, continueSummaryPrompt, type NotesLang } from '@/lib/prompts'
@@ -51,8 +51,10 @@ export async function POST(req: Request) {
       .maybeSingle()
     if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'summary' })
-    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    // Fail closed: if the usage check itself errors, no AI call goes out.
+    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'summary' })
+    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
+    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
     const trk = tracker(supabase, 'summary')
 
     const bl = body.lang
@@ -63,17 +65,23 @@ export async function POST(req: Request) {
     // The output caps stay generous: a detailed revision document is meant to be
     // long, and a tight cap would silently truncate it mid-sentence.
     let text: string
-    if (tr.content.length <= 90000) {
-      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, tr.content, 'short', custom) }], { max: 8000, track: trk })
-      else text = await writeDetailed(lang, tr.content, custom, trk)
-    } else {
-      const partials: string[] = []
-      for (const slice of sliceText(tr.content, 60000).slice(0, 8)) {
-        partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed', custom) }], { max: 20000, track: trk }))
+    try {
+      if (tr.content.length <= 90000) {
+        if (length === 'short') text = await generate([{ text: summaryPrompt(lang, tr.content, 'short', custom) }], { max: 8000, track: trk })
+        else text = await writeDetailed(lang, tr.content, custom, trk)
+      } else {
+        const partials: string[] = []
+        for (const slice of sliceText(tr.content, 60000).slice(0, 8)) {
+          partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed', custom) }], { max: 20000, track: trk }))
+        }
+        const joined = partials.join('\n\n')
+        if (length === 'short') text = await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: trk })
+        else text = await writeDetailed(lang, joined, custom, trk)
       }
-      const joined = partials.join('\n\n')
-      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: trk })
-      else text = await writeDetailed(lang, joined, custom, trk)
+    } catch (e) {
+      // A failed generation never costs the user a call.
+      after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'summary' }) } catch {} })
+      throw e
     }
     text = cleanMarkdown(text)
 
@@ -88,6 +96,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
-    return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
+    console.error('[summary]', e)
+    return fail('Something went wrong on our side. Try again.', 500)
   }
 }

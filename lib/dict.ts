@@ -4,7 +4,7 @@ export const en = {
     transcribe: 'Transcript',
     summary: 'Summary',
     quiz: 'Quiz',
-    chat: 'Tutor',
+    chat: 'AI',
     merge: 'Combined',
     other: 'Other',
   },
@@ -48,7 +48,7 @@ export const en = {
   },
   tools: {
     transcript: 'Transcript', summary: 'Summary', focus: 'Doctor’s focus', quiz: 'Quiz',
-    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan', chat: 'Tutor', merged: 'Combined notes',
+    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan', chat: 'Ryan AI', merged: 'Combined notes',
   },
   upload: {
     drop: 'Drag files here or click to choose',
@@ -78,7 +78,7 @@ export const en = {
     needTranscript: 'Transcribe this source first (Studio → Transcript).',
     notTranscribed: 'This source has no transcript yet. Open Studio → Transcript to start.',
     flashInfo: 'Flashcards are built from the quiz questions.',
-    chatInfo: 'The tutor answers from all transcripts in this subject.',
+    chatInfo: 'Ryan AI answers from all transcripts in this subject.',
     focusInfo: 'Collected automatically from the transcript. No AI call needed.',
     working: 'Working…', noSource: 'Add a source first.',
     comboTitle: 'Combine sources', transcribeMissing: 'Transcribe {n} missing', createCombo: 'Create combined notes',
@@ -114,7 +114,7 @@ export const en = {
     compressBigFail: 'This file is bigger than the 50MB storage limit and could not be made smaller on this device. Try again in a moment, or compress it on the device first.',
     splitFail: 'This PDF is too big to split automatically (a single page may exceed the limit). Export it at a lower quality and upload it again.',
     storageLimit: 'The file is bigger than the 50MB storage limit — it should have been compressed or split first. Please try again.',
-    select: 'Select', selected: '{n} selected', done: 'Done',
+    select: 'Select', selected: '{n} selected', done: 'Done', selectAll: 'Select all',
   },
   errors: {
     quota: 'The AI service hit a temporary cap (not your account — it refills by itself). Wait a minute and press Resume. Nothing is lost.',
@@ -156,7 +156,7 @@ export const en = {
     list: [
       { title: 'Private subject library', desc: 'Every subject keeps its own lectures, safely stored and visible only to you.', soon: false },
       { title: 'Smart transcript & summary', desc: 'Keeps English medical terms and highlights what your doctor stressed.', soon: false },
-      { title: 'A tutor from your lectures', desc: 'Answers only from your files, and says so when the answer is not there.', soon: false },
+      { title: 'Ryan AI — from your lectures', desc: 'Answers only from your files, and says so when the answer is not there.', soon: false },
       { title: 'Viva practice', desc: 'Exam mode: an examiner asks one question at a time and grades your answer from your lectures.', soon: false },
     ],
     ctaTitle: 'Subject → Lecture → Summary → Quiz',
@@ -172,7 +172,7 @@ export const ar: Dict = {
     transcribe: 'التفريغ',
     summary: 'الملخص',
     quiz: 'الاختبار',
-    chat: 'المدرّس',
+    chat: 'ريان AI',
     merge: 'الملاحظات المجمّعة',
     other: 'أخرى',
   },
@@ -216,7 +216,7 @@ export const ar: Dict = {
   },
   tools: {
     transcript: 'التفريغ', summary: 'الملخص', focus: 'تركيز الدكتور', quiz: 'اختبار',
-    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة', chat: 'المدرّس', merged: 'ملاحظات مجمّعة',
+    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة', chat: 'ريان AI', merged: 'ملاحظات مجمّعة',
   },
   upload: {
     drop: 'اسحب الملفات هنا أو اضغط للاختيار',
@@ -246,7 +246,7 @@ export const ar: Dict = {
     needTranscript: 'فرّغ المصدر ده الأول (الاستوديو ← التفريغ).',
     notTranscribed: 'المصدر ده لسه مفيهوش تفريغ. افتح الاستوديو ← التفريغ وابدأ.',
     flashInfo: 'البطاقات بتتعمل من أسئلة الاختبار.',
-    chatInfo: 'المدرّس بيجاوب من كل التفريغات اللي في المادة.',
+    chatInfo: 'ريان AI بيجاوب من كل التفريغات اللي في المادة.',
     focusInfo: 'بتتجمع أوتوماتيك من التفريغ، من غير استدعاء للذكاء الاصطناعي.',
     working: 'جارٍ العمل…', noSource: 'ضيف مصدر الأول.',
     comboTitle: 'دمج المصادر', transcribeMissing: 'فرّغ {n} ناقصين', createCombo: 'اعمل ملاحظات مجمّعة',
@@ -282,7 +282,7 @@ export const ar: Dict = {
     compressBigFail: 'الملف أكبر من حد التخزين (50 ميجا) ومقدرناش نصغّره على جهازك. جرّب تاني بعد شوية، أو اضغّطه الأول على جهازك.',
     splitFail: 'الـ PDF كبير جدًا على التقسيم التلقائي (ممكن صفحة واحدة بتعدي الحد). صدّره بجودة أقل وارفعه تاني.',
     storageLimit: 'الملف أكبر من حد التخزين (50 ميجا) — المفروض يتضغط أو يتقسم الأول. جرّب تاني لو سمحت.',
-    select: 'تحديد', selected: 'تم تحديد {n}', done: 'تم',
+    select: 'تحديد', selected: 'تم تحديد {n}', done: 'تم', selectAll: 'تحديد الكل',
   },
   errors: {
     quota: 'خدمة الذكاء الاصطناعي نفسها وصلت لحد مؤقت في الاستخدام — مش من حسابك، وبيرجع لوحده. استنى دقيقة واضغط كمّل. مفيش حاجة ضاعت.',
@@ -324,7 +324,7 @@ export const ar: Dict = {
     list: [
       { title: 'مكتبة مواد خاصة', desc: 'كل مادة ليها محاضراتها، متخزنة بأمان ومش بيشوفها غيرك.', soon: false },
       { title: 'تفريغ وملخص ذكي', desc: 'يحافظ على المصطلحات الإنجليزية ويبرز اللي ركّز عليه الدكتور.', soon: false },
-      { title: 'مدرّس من محاضراتك', desc: 'يجاوب من ملفاتك بس، ويقولك لو الإجابة مش موجودة.', soon: false },
+      { title: 'ريان AI من محاضراتك', desc: 'يجاوب من ملفاتك بس، ويقولك لو الإجابة مش موجودة.', soon: false },
       { title: 'تدريب الشفوي', desc: 'وضع الامتحان: ممتحن بيسأل سؤال سؤال وبيقيّم إجابتك من محاضراتك.', soon: false },
     ],
     ctaTitle: 'مادة ← محاضرة ← ملخص ← اختبار',

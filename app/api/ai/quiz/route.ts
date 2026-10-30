@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
@@ -60,12 +60,21 @@ export async function POST(req: Request) {
       .maybeSingle()
     if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'quiz' })
-    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    // Fail closed: if the usage check itself errors, no AI call goes out.
+    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'quiz' })
+    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
+    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-    const raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level, custom) }], {
-      json: true, max: 14000, track: tracker(supabase, 'quiz'),
-    })
+    let raw: string
+    try {
+      raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level, custom) }], {
+        json: true, max: 14000, track: tracker(supabase, 'quiz'),
+      })
+    } catch (e) {
+      // A failed generation never costs the user a call.
+      after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'quiz' }) } catch {} })
+      throw e
+    }
     const questions = parseQuiz(raw)
     if (questions.length === 0) return fail('The AI returned an unreadable quiz. Press Generate again.', 502)
 
@@ -80,6 +89,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, count: questions.length })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
-    return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
+    console.error('[quiz]', e)
+    return fail('Something went wrong on our side. Try again.', 500)
   }
 }

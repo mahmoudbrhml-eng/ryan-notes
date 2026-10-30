@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { chatSystem, type ChatMode, type NotesLang } from '@/lib/prompts'
@@ -42,8 +42,12 @@ export async function POST(req: Request) {
     const material = (rows ?? []).filter((r) => r.content)
     if (material.length === 0) return fail('Transcribe a lecture first, then ask questions here.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'chat' })
-    if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    // Fail closed: if the usage check itself errors, no AI call goes out.
+    // A failed generation refunds the call (see refund_usage) so users are
+    // never charged for answers they did not get.
+    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'chat' })
+    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
+    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
     // Small material is sent whole; large material is reduced to the passages that match the question.
     const lastUser = [...hist].reverse().find((h) => h.role === 'user')
@@ -53,10 +57,18 @@ export async function POST(req: Request) {
       70000
     )
     const prompt = `${chatSystem(mode, lang)}\n\nLECTURE MATERIAL:\n${context}\n\nCONVERSATION:\n${convo}\nStudent: ${message}\nTutor:`
-    const reply = await generate([{ text: prompt }], { max: 4000, track: tracker(supabase, 'chat') })
+    let reply: string
+    try {
+      reply = await generate([{ text: prompt }], { max: 4000, track: tracker(supabase, 'chat') })
+    } catch (e) {
+      after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'chat' }) } catch {} })
+      throw e
+    }
     return NextResponse.json({ reply: reply.trim() })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
-    return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
+    // Never leak raw internals (Supabase/Node errors) to the client.
+    console.error('[chat]', e)
+    return fail('Something went wrong on our side. Try again.', 500)
   }
 }

@@ -12,6 +12,7 @@ import ReadControls from '@/components/ReadControls'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
 import { SelectionProvider } from '@/components/Selection'
 import StudioPanel, { type StudioFile, type Tab } from '@/components/StudioPanel'
+import WsGrid from '@/components/WsGrid'
 import { getI18n } from '@/lib/i18n'
 import { fmtDate, fmtSize } from '@/lib/format'
 import { kindOf } from '@/lib/filekind'
@@ -141,64 +142,11 @@ export default async function SubjectPage({
   const isVideo = (active?.mime ?? '').startsWith('video/') && active?.mime !== 'video/youtube'
   const isAudio = (active?.mime ?? '').startsWith('audio/')
 
-  const panelBtn = (p: Panel, label: string, icon: IconName) => (
-    <Link
-      key={p}
-      scroll={false}
-      href={`/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${tab}&p=${p}`}
-      aria-current={panel === p ? 'page' : undefined}
-      className="text-muted flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold aria-[current=page]:text-brand"
-    >
-      <Icon name={icon} className="h-5 w-5" />
-      {label}
-    </Link>
-  )
-
-  return (
-    <AppShell title={subject.name} back={{ href: '/subjects', label: t.ws.back }}>
-      <SelectionProvider>
-      <PanelSwipe current={panel} base={swipeBase} labels={{ next: t.ws.nextPanel, prev: t.ws.prevPanel }}>
-      <div className="ws">
-        <SourcesPanel
-          subjectId={subject.id}
-          userId={userId}
-          files={srcFiles}
-          activeId={activeId}
-          hideOnMobile={panel !== 'sources'}
-          t={t}
-        />
-
-        {/* ---------- Notes / results ---------- */}
-        <section className={`panel flex min-h-[420px] flex-col ${panel !== 'notes' ? 'max-[1099px]:hidden' : ''}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
-            <h2 className="min-w-0 truncate font-semibold">
-              {title}
-              {active && tab !== 'chat' && tab !== 'overview' && (
-                <span dir="auto" className="muted font-normal"> · {outName}</span>
-              )}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* add a new note from inside the reading view — no panel switch, no going back */}
-              <QuickAdd subjectId={subject.id} userId={userId} t={t} />
-              {tab !== 'chat' && tab !== 'overview' && <ReadControls labels={t.read} />}
-              {tab === 'transcript' && transcript && (
-                <ExportButtons text={transcript} filename={`${outName}.md`} pdfHref={pdfHref('transcript')} labels={exportLabels} />
-              )}
-              {tab === 'summary' && summary && (
-                <ExportButtons text={summary} filename={`${outName}-summary.md`} pdfHref={pdfHref('summary')} labels={exportLabels} />
-              )}
-              {tab === 'combo' && combo?.content && (
-                <ExportButtons
-                  text={combo.content as string}
-                  filename={`${String(combo.title).slice(0, 60)}.md`}
-                  pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
-                  labels={exportLabels}
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="read-md flex-1 px-5 py-5">
+  // The deliverable itself (everything except the AI chat): rendered in the
+  // wide middle panel and, on phones, again inside the Studio panel so
+  // opening a result never kicks you out of the Studio.
+  const readContent = (
+    <>
             {tab === 'overview' &&
               (active ? (
                 <div className="flex flex-col gap-6">
@@ -307,6 +255,80 @@ export default async function SubjectPage({
               ) : (
                 <p className="muted py-10 text-center">{t.quiz.empty}</p>
               ))}
+    </>
+  )
+
+  const panelBtn = (p: Panel, label: string, icon: IconName) => (
+    <Link
+      key={p}
+      scroll={false}
+      href={`/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${tab}&p=${p}`}
+      aria-current={panel === p ? 'page' : undefined}
+      className="text-muted flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold aria-[current=page]:text-brand"
+    >
+      <Icon name={icon} className="h-5 w-5" />
+      {label}
+    </Link>
+  )
+
+  return (
+    <AppShell title={subject.name} back={{ href: '/subjects', label: t.ws.back }}>
+      <SelectionProvider>
+      <PanelSwipe current={panel} base={swipeBase} labels={{ next: t.ws.nextPanel, prev: t.ws.prevPanel }}>
+      <WsGrid>
+        <SourcesPanel
+          subjectId={subject.id}
+          userId={userId}
+          files={srcFiles}
+          activeId={activeId}
+          hideOnMobile={panel !== 'sources'}
+          t={t}
+        />
+
+        {/* ---------- Notes / results ---------- */}
+        <section className={`panel flex min-h-[420px] flex-col ${panel !== 'notes' ? 'max-[1099px]:hidden' : ''}`}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <h2 className="min-w-0 truncate font-semibold">
+              {title}
+              {active && tab !== 'chat' && tab !== 'overview' && (
+                <span dir="auto" className="muted font-normal"> · {outName}</span>
+              )}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* add a new note from inside the reading view — no panel switch, no going back */}
+              <QuickAdd subjectId={subject.id} userId={userId} t={t} />
+              {tab !== 'chat' && tab !== 'overview' && <ReadControls labels={t.read} />}
+              {tab === 'transcript' && transcript && (
+                <ExportButtons text={transcript} filename={`${outName}.md`} pdfHref={pdfHref('transcript')} labels={exportLabels} />
+              )}
+              {tab === 'summary' && summary && (
+                <ExportButtons text={summary} filename={`${outName}-summary.md`} pdfHref={pdfHref('summary')} labels={exportLabels} />
+              )}
+              {tab === 'combo' && combo?.content && (
+                <ExportButtons
+                  text={combo.content as string}
+                  filename={`${String(combo.title).slice(0, 60)}.md`}
+                  pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
+                  labels={exportLabels}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="read-md flex-1 px-5 py-5">
+            {tab === 'chat' ? (
+              <ChatPanel
+                key={sp.mode === 'exam' ? 'exam' : 'chat'}
+                subjectId={subject.id}
+                hasSources={anyTranscript}
+                t={t.chat}
+                langLabels={langLabels}
+                initialMode={sp.mode === 'exam' ? 'exam' : 'explain'}
+                errors={t.errors}
+              />
+            ) : (
+              readContent
+            )}
           </div>
 
           {tab !== 'chat' && (
@@ -327,11 +349,12 @@ export default async function SubjectPage({
           generated={generated}
           combos={combos.map((c) => ({ id: c.id, title: c.title, date: fmtDate(c.created_at, lang) }))}
           activeCombo={comboId}
-          mode={sp.mode === 'exam' ? 'exam' : ''}
           hideOnMobile={panel !== 'studio'}
           t={t}
-        />
-      </div>
+        >
+          {tab !== 'chat' && tab !== 'overview' && <div className="read-md px-5 py-5">{readContent}</div>}
+        </StudioPanel>
+        </WsGrid>
       </PanelSwipe>
       </SelectionProvider>
 

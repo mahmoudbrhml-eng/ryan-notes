@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { mergePrompt, quizPrompt, summaryPrompt, continueSummaryPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
@@ -97,13 +97,14 @@ export async function POST(req: Request) {
     const baseTitle = sourceList.map((s) => pretty(s.name)).join(' + ').slice(0, 120)
 
     // The verbatim notes join needs no AI at all: skip the usage counter for it.
+    // Fail closed: if the usage check itself errors, no AI call goes out.
     const verbatimNotes = job === 'notes' && !!group
     let mergeTrk: ReturnType<typeof tracker> | undefined
     if (!verbatimNotes) {
-      const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'merge' })
-      if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
-      const trk = tracker(supabase, 'merge')
-      mergeTrk = trk
+      const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'merge' })
+      if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
+      if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+      mergeTrk = tracker(supabase, 'merge')
     }
 
     const insertMerged = async (title: string, content: string, data: Record<string, unknown>) => {
@@ -115,24 +116,35 @@ export async function POST(req: Request) {
         })
         .select('id')
         .single()
-      if (error) return fail(error.message, 500)
+      if (error) {
+        console.error('[merge] insert failed:', error.message)
+        return fail('Could not save the combined result. Try again.', 500)
+      }
       return NextResponse.json({ ok: true, id: row.id })
     }
+
+    // Every AI path below refunds the daily counter when generation fails.
+    const refund = () => after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'merge' }) } catch {} })
 
     // ---- one combined summary from all selected transcripts ----
     if (job === 'summary') {
       let out: string
-      if (length === 'short') {
-        out = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: mergeTrk }))
-      } else {
-        let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: mergeTrk }))
-        for (let pass = 0; pass < 2 && t.length < minDetailed(joined.length); pass++) {
-          const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000, track: mergeTrk })
-          const clean = cleanMarkdown(more)
-          if (clean.length < 400) break
-          t = `${t}\n\n${clean}`
+      try {
+        if (length === 'short') {
+          out = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: mergeTrk }))
+        } else {
+          let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: mergeTrk }))
+          for (let pass = 0; pass < 2 && t.length < minDetailed(joined.length); pass++) {
+            const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000, track: mergeTrk })
+            const clean = cleanMarkdown(more)
+            if (clean.length < 400) break
+            t = `${t}\n\n${clean}`
+          }
+          out = t
         }
-        out = t
+      } catch (e) {
+        refund()
+        throw e
       }
       const title = out.match(/^#{1,2} (.+)$/m)?.[1] ?? `${baseTitle} — Summary`
       return await insertMerged(title, out, { job: 'summary', length })
@@ -140,9 +152,15 @@ export async function POST(req: Request) {
 
     // ---- one combined quiz from all selected transcripts ----
     if (job === 'quiz') {
-      const raw = await generate([{ text: quizPrompt(lang, sampleText(joined, 100000), count, level, custom) }], {
-        json: true, max: 14000, track: mergeTrk,
-      })
+      let raw: string
+      try {
+        raw = await generate([{ text: quizPrompt(lang, sampleText(joined, 100000), count, level, custom) }], {
+          json: true, max: 14000, track: mergeTrk,
+        })
+      } catch (e) {
+        refund()
+        throw e
+      }
       const questions = parseQuiz(raw)
       if (questions.length === 0) return fail('The AI returned an unreadable quiz. Try again.', 502)
       const title = `${baseTitle} — Quiz`
@@ -160,15 +178,22 @@ export async function POST(req: Request) {
       return await insertMerged(title, joined, { parts: true })
     }
 
-    const raw = await generate(
-      [{ text: mergePrompt(lang, sourceList.map((s) => ({ name: s.name, text: sampleText(text.get(s.id) ?? '', 60000) })), custom) }],
-      { max: 16000, track: mergeTrk }
-    )
+    let raw: string
+    try {
+      raw = await generate(
+        [{ text: mergePrompt(lang, sourceList.map((s) => ({ name: s.name, text: sampleText(text.get(s.id) ?? '', 60000) })), custom) }],
+        { max: 16000, track: mergeTrk }
+      )
+    } catch (e) {
+      refund()
+      throw e
+    }
     const content = cleanMarkdown(raw)
     const title = content.match(/^#{1,2} (.+)$/m)?.[1] ?? baseTitle
     return await insertMerged(title, content, {})
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
-    return fail(e instanceof Error ? e.message : 'Unexpected error', 500)
+    console.error('[merge]', e)
+    return fail('Something went wrong on our side. Try again.', 500)
   }
 }

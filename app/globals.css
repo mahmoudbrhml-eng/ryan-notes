@@ -91,9 +91,14 @@ html { scroll-behavior: smooth; }
 
   .ws { display: grid; gap: 14px; padding: 0 14px 14px; grid-template-columns: minmax(0, 1fr); }
   @media (max-width: 1099px) { .ws { padding-bottom: 88px; } }
+  .wsh { display: none; }
   @media (min-width: 1100px) {
-    .ws { grid-template-columns: 330px minmax(0, 1fr) 330px; height: calc(100vh - 76px); }
+    .ws { grid-template-columns: 330px 10px minmax(0, 1fr) 10px 330px; height: calc(100vh - 76px); }
     .ws > * { overflow-y: auto; min-height: 0; }
+    /* Drag handles between the three workspace panels (desktop only). */
+    .wsh { display: block; position: relative; cursor: col-resize; touch-action: none; }
+    .wsh::after { content: ''; position: absolute; top: 24%; bottom: 24%; left: 3px; right: 3px; border-radius: 99px; background: var(--line); opacity: 0; transition: opacity .15s; }
+    .ws:hover .wsh::after, .wsh:active::after { opacity: 1; }
   }
   .source { border-radius: 18px; padding: 10px; border: 1px solid transparent; }
   .source[data-active="true"] { background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 35%, transparent); }
