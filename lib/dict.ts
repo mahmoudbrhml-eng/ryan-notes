@@ -73,6 +73,7 @@ export const en = {
     working: 'Working…', noSource: 'Add a source first.',
     comboTitle: 'Combine sources', transcribeMissing: 'Transcribe {n} missing', createCombo: 'Create combined notes',
     comboHint: 'Merges the selected sources into one organized note and shows what each one adds.',
+    partsHint: 'These are the parts of one recording — their transcripts will be joined in order, word for word, with no AI rewriting. Instant.',
     vivaInfo: 'Exam mode: the examiner asks one question at a time and grades your answer from your own lectures.',
   },
   quiz: {
@@ -227,6 +228,7 @@ export const ar: Dict = {
     working: 'جارٍ العمل…', noSource: 'ضيف مصدر الأول.',
     comboTitle: 'دمج المصادر', transcribeMissing: 'فرّغ {n} ناقصين', createCombo: 'اعمل ملاحظات مجمّعة',
     comboHint: 'بتدمج المصادر المحددة في ملاحظة واحدة منظمة وبتوضح إيه اللي كل مصدر ضافه.',
+    partsHint: 'الأجزاء دي من نفس التسجيل — تفريغها هيتلزق بالترتيب زي ما اتقال بالظبط، من غير إعادة صياغة، وفي ثواني.',
     vivaInfo: 'وضع الامتحان: الممتحن بيسأل سؤال واحد كل مرة وبيقيّم إجابتك من محاضراتك إنت.',
   },
   quiz: {

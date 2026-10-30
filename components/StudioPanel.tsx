@@ -7,6 +7,7 @@ import { ApiError, postJson } from '@/lib/client-api'
 import { useJobs, type JobFile } from './Jobs'
 import Icon, { type IconName } from './Icon'
 import { useSelection } from './Selection'
+import { matchPartGroup } from '@/lib/parts'
 import type { Dict } from '@/lib/dict'
 import type { FileKind } from '@/lib/filekind'
 
@@ -73,6 +74,9 @@ export default function StudioPanel({
   const file = files.find((f) => f.id === activeId) ?? null
   const selFiles = files.filter((f) => sel.selected.includes(f.id))
   const missing = selFiles.filter((f) => !f.transcript || f.status !== 'done')
+  // Split-file parts ("Lecture (1-3).mp3"…) merge verbatim on the server, so
+  // the selection box can promise a lossless, instant join.
+  const partsGroup = selFiles.length >= 2 ? matchPartGroup(selFiles.map((f) => f.name)) : null
   const [lang, setLang] = useState<NLang>('ar')
   const [length, setLength] = useState<'short' | 'detailed'>('detailed')
   const [count, setCount] = useState(10)
@@ -184,7 +188,7 @@ export default function StudioPanel({
         <div className="flex flex-col gap-3 rounded-2xl bg-brand-soft p-3">
           <div>
             <div className="text-sm font-bold text-brand">{t.studio.comboTitle} · {selFiles.length}</div>
-            <p className="muted mt-1 text-xs leading-5">{t.studio.comboHint}</p>
+            <p className="muted mt-1 text-xs leading-5">{partsGroup ? t.studio.partsHint : t.studio.comboHint}</p>
           </div>
           <ul className="space-y-1.5 text-xs">
             {selFiles.map((f) => (

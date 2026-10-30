@@ -143,7 +143,7 @@ const TARGET = 45 * 1024 * 1024 // re-encode target: safely under the 50MB cap
 const HARD_LIMIT = 49 * 1024 * 1024 // above this we refuse: storage rejects >50MB
 const COPY_TARGET = 38 * 1024 * 1024 // split parts aim below this
 const PASS_TIMEOUT = 20 * 60 * 1000 // a single re-encode pass never runs longer
-const JS_SPLIT_MAX = 160 * 1024 * 1024 // the pure-JS MP3 split holds the file in RAM
+const JS_SPLIT_MAX = 320 * 1024 * 1024 // the pure-JS MP3 split holds the file in RAM
 
 // Quality ladder for very long recordings: 48k fits ~3h, 32k ~4h, then 24k/16k
 // cover the rare marathon files. Speech stays perfectly transcribable.
@@ -203,13 +203,13 @@ function mp3FrameLen(b: Uint8Array, i: number): number {
   return len
 }
 
-// exported for the node test harness (scripts/test_split_mp3.js)
+// exported for the node test harness (scripts/test_split_merge.ts)
 export async function splitMp3InJs(input: File): Promise<File[]> {
   // Read once for scanning; the output parts are cheap views over the same
   // bytes (Blob.slice does not copy), so peak memory stays ~1x the file.
   const b = new Uint8Array(await input.arrayBuffer())
   const start = id3v2Size(b)
-  const cuts: number[] = [start]
+  const cuts: number[] = [0] // part 1 keeps the ID3 tag: the split must be lossless
   let acc = 0
   let i = start
   while (i < b.length - 4) {
@@ -226,15 +226,21 @@ export async function splitMp3InJs(input: File): Promise<File[]> {
       i++
     }
   }
-  const parts: File[] = []
-  const base = input.name.replace(/\.mp3$/i, '')
+  // Contiguous ranges; a sub-1KB tail (stray tags, junk) merges into the
+  // previous part instead of being dropped, so no byte is ever lost and the
+  // "(k-N)" names always describe the real number of parts.
+  const ranges: { from: number; to: number }[] = []
   for (let k = 0; k < cuts.length; k++) {
     const from = cuts[k]
     const to = k + 1 < cuts.length ? cuts[k + 1] : b.length
-    if (to - from < 1024) continue // trailing junk sliver
-    parts.push(new File([input.slice(from, to)], `${base} (${k + 1}-${cuts.length}).mp3`, { type: 'audio/mpeg' }))
+    if (to - from < 1024 && ranges.length > 0) ranges[ranges.length - 1].to = to
+    else ranges.push({ from, to })
   }
-  return parts
+  const n = ranges.length
+  const base = input.name.replace(/\.mp3$/i, '')
+  return ranges.map((r, k) =>
+    new File([input.slice(r.from, r.to)], `${base} (${k + 1}-${n}).mp3`, { type: 'audio/mpeg' }),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +448,23 @@ export async function compressMedia(
       }
     } catch (e) {
       lastReason = e instanceof Error ? e.message : 'copy-split-failed'
+    }
+
+    // 5) truly last resort for giant MP3s (the engine could not load and the
+    //    capped JS split was skipped): try the frame split with no size cap.
+    //    It costs one arrayBuffer of RAM — still beats a guaranteed failure.
+    if (/\.mp3$/i.test(input.name) && input.size > JS_SPLIT_MAX) {
+      try {
+        onStage('split')
+        onProgress(10)
+        const parts = await splitMp3InJs(input)
+        if (parts.length >= 2) {
+          onProgress(99)
+          return { files: parts, note: 'split' }
+        }
+      } catch (e) {
+        lastReason = e instanceof Error ? e.message : 'js-split-failed'
+      }
     }
 
     throw new Error(`compress-failed: ${lastReason}`)

@@ -4,6 +4,7 @@ import { GeminiError, apiKeys, generate, uploadFile, type GeminiPart } from '@/l
 import { SYS, reviewPrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
+import { parsePartName } from '@/lib/parts'
 import { PDFDocument } from 'pdf-lib'
 
 export const maxDuration = 300
@@ -106,6 +107,28 @@ async function handle(req: Request) {
   }
   const setError = async (msg: string) => {
     await supabase.from('files').update({ ai_status: 'error', ai_error: msg.slice(0, 300) }).eq('id', fileId)
+  }
+
+  // A split recording ("Lecture (2-3).mp3") continues the previous part, so the
+  // tail of that part's transcript keeps the model from restarting mid-sentence.
+  const siblingPrev = async (): Promise<string> => {
+    const p = parsePartName(file.name)
+    if (!p || p.idx <= 1) return ''
+    const ext = file.name.slice(file.name.lastIndexOf('.'))
+    const { data: pf } = await supabase
+      .from('files')
+      .select('id')
+      .eq('subject_id', file.subject_id)
+      .eq('name', `${p.base} (${p.idx - 1}-${p.total})${ext}`)
+      .maybeSingle()
+    if (!pf) return ''
+    const { data: po } = await supabase
+      .from('outputs')
+      .select('content')
+      .eq('file_id', pf.id)
+      .eq('kind', 'transcript')
+      .maybeSingle()
+    return ((po?.content as string) ?? '').slice(-400)
   }
 
   // ---- START: plan the chunks, upload the file to the AI service, create/reset the output row ----
@@ -218,7 +241,8 @@ async function handle(req: Request) {
 
   try {
     const prevIdx = Object.keys(old.parts).map(Number).filter((k) => k < i).sort((a, b) => b - a)[0]
-    const prev = prevIdx !== undefined ? old.parts[String(prevIdx)].slice(-400) : ''
+    let prev = prevIdx !== undefined ? old.parts[String(prevIdx)].slice(-400) : ''
+    if (!prev && kind === 'media') prev = await siblingPrev()
     const sys = SYS(old.lang)
     let parts: GeminiPart[]
     let pinned = false

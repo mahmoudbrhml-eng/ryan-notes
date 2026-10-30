@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { mergePrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown, sampleText } from '@/lib/clean'
+import { matchPartGroup } from '@/lib/parts'
 
 export const maxDuration = 300
 
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     const subjectId = String(body.subjectId ?? '')
     if (!UUID.test(subjectId)) return fail('Invalid subject')
     const ids = (Array.isArray(body.fileIds) ? (body.fileIds as unknown[]) : []).map(String).filter((x) => UUID.test(x))
-    if (ids.length < 2 || ids.length > 6) return fail('Select between 2 and 6 sources.')
+    if (ids.length < 2) return fail('Select at least 2 sources.')
     const bl = body.lang
     const lang: NotesLang = bl === 'en' || bl === 'fa' ? bl : 'ar'
 
@@ -30,6 +31,36 @@ export async function POST(req: Request) {
     ])
     const text = new Map((outs ?? []).map((o) => [o.file_id as string, (o.content as string) ?? '']))
     const name = new Map((files ?? []).map((f) => [f.id as string, f.name as string]))
+
+    // Parts of one split file ("Lecture (1-3).mp3"…) are re-joined verbatim, in
+    // order, with no AI and no truncation — their transcripts already come from
+    // the real audio, so rewriting or sampling them would only lose content.
+    const group = matchPartGroup(ids.map((id) => name.get(id) ?? ''))
+    if (group) {
+      if (ids.length > 16) return fail('Select up to 16 parts.')
+      const byName = new Map((files ?? []).map((f) => [f.name as string, f.id as string]))
+      const orderedIds = group.ordered.map((n) => byName.get(n)!)
+      if (orderedIds.some((x) => !x)) return fail('Could not match the selected parts.', 400)
+      const contents = orderedIds.map((id) => (text.get(id) ?? '').trim())
+      if (contents.some((c) => !c)) {
+        return fail('Transcribe all selected sources first.', 409, 'need_transcript')
+      }
+      const suffix = lang === 'en' ? 'Full transcript' : 'التفريغ الكامل'
+      const title = `${group.base} — ${suffix}`.slice(0, 140)
+      const { data: row, error } = await supabase
+        .from('outputs')
+        .insert({
+          subject_id: subjectId, file_id: null, kind: 'merged', title, lang,
+          content: contents.join('\n\n'),
+          data: { parts: true, sources: orderedIds.map((id) => ({ id, name: name.get(id) })) },
+        })
+        .select('id')
+        .single()
+      if (error) return fail(error.message, 500)
+      return NextResponse.json({ ok: true, id: row.id })
+    }
+
+    if (ids.length > 6) return fail('Select between 2 and 6 sources.')
     const sources = ids
       .filter((id) => name.has(id))
       .map((id) => ({ id, name: name.get(id) as string, text: text.get(id) ?? '' }))

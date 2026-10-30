@@ -67,6 +67,17 @@ export default function SourcesPanel({
     setPending((p) => p.filter((x) => x.state !== 'done'))
   }, [files])
 
+  // Fire-and-forget failure report so device-side errors are visible to us
+  // (the exact answer to "why does it always fail here?"). Never blocks.
+  const logFail = (stage: string, file: File, message?: string) => {
+    void fetch('/api/log/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stage, name: file.name, size: file.size, mime: file.type, message: message ?? null }),
+      keepalive: true,
+    }).catch(() => {})
+  }
+
   async function uploadFiles(list: File[]) {
     if (list.length === 0) return
     const supabase = createClient()
@@ -80,6 +91,7 @@ export default function SourcesPanel({
       const key = items[i].key
       const media = isMedia(file)
       if (file.size > (media ? MAX_MEDIA : MAX_DOC)) {
+        logFail('too-big', file)
         mark(key, 'error', t.upload.tooBig)
         continue
       }
@@ -91,6 +103,7 @@ export default function SourcesPanel({
       let up: File[] = [file]
       if (media && file.size > COMPRESS_ABOVE) {
         let ok = false
+        let lastMsg = ''
         for (let attempt = 0; !ok && attempt < 2; attempt++) {
           try {
             const r = await compressMedia(
@@ -100,11 +113,12 @@ export default function SourcesPanel({
             )
             up = r.files
             ok = true
-          } catch {
-            /* one retry, then fall through */
+          } catch (e) {
+            lastMsg = e instanceof Error ? e.message : String(e)
           }
         }
         if (!ok) {
+          logFail('compress-failed', file, lastMsg)
           if (file.size > SAFE_RAW) {
             mark(key, 'error', t.src.compressBigFail)
             continue
@@ -113,6 +127,7 @@ export default function SourcesPanel({
         }
       } else if (looksLikePdf(file) && file.size > SAFE_RAW) {
         let parts: File[] | null = null
+        let lastMsg = ''
         for (let attempt = 0; !parts && attempt < 2; attempt++) {
           try {
             parts = await splitPdf(
@@ -120,11 +135,12 @@ export default function SourcesPanel({
               () => mark(key, 'tooling'),
               (a, b) => mark(key, 'splitting', undefined, Math.round((a / b) * 100)),
             )
-          } catch {
-            /* one retry, then fall through */
+          } catch (e) {
+            lastMsg = e instanceof Error ? e.message : String(e)
           }
         }
         if (!parts || parts.length === 0) {
+          logFail('split-failed', file, lastMsg)
           mark(key, 'error', t.src.splitFail)
           continue
         }
@@ -133,11 +149,13 @@ export default function SourcesPanel({
         try {
           const small = await compressImage(file)
           if (!small) {
+            logFail('image-failed', file, 'no output produced')
             mark(key, 'error', t.src.compressBigFail)
             continue
           }
           up = [small]
-        } catch {
+        } catch (e) {
+          logFail('image-failed', file, e instanceof Error ? e.message : String(e))
           mark(key, 'error', t.src.compressBigFail)
           continue
         }
@@ -155,6 +173,7 @@ export default function SourcesPanel({
           .from('lecture-files')
           .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
         if (upErr) {
+          logFail('storage-rejected', upFile, upErr.message)
           mark(key, 'error', friendlyStorage(upErr.message))
           failed = true
           break
@@ -165,6 +184,7 @@ export default function SourcesPanel({
         })
         if (dbErr) {
           await supabase.storage.from('lecture-files').remove([path])
+          logFail('db-failed', upFile, dbErr.message)
           mark(key, 'error', dbErr.message)
           failed = true
           break
