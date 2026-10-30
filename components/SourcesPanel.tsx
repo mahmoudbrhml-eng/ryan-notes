@@ -96,9 +96,9 @@ export default function SourcesPanel({
             const r = await compressMedia(
               file,
               (pct) => mark(key, 'compressing', undefined, pct),
-              () => mark(key, 'tooling'),
+              (s) => mark(key, s === 'split' ? 'splitting' : 'tooling'),
             )
-            up = [r.file]
+            up = r.files
             ok = true
           } catch {
             /* one retry, then fall through */
