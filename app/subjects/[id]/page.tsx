@@ -78,7 +78,7 @@ export default async function SubjectPage({
       : Promise.resolve(null),
     activeId ? supabase.from('outputs').select('kind, content, data, lang').eq('file_id', activeId) : Promise.resolve(null),
     tab === 'combo' && comboId
-      ? supabase.from('outputs').select('id, title, content, lang').eq('id', comboId).eq('kind', 'merged').maybeSingle()
+      ? supabase.from('outputs').select('id, title, content, lang, data').eq('id', comboId).eq('kind', 'merged').maybeSingle()
       : Promise.resolve(null),
   ])
   const activeUrl = signedRes?.data?.signedUrl ?? ''
@@ -91,6 +91,7 @@ export default async function SubjectPage({
   const tLang = sel.find((o) => o.kind === 'transcript')?.lang as string | undefined
   const sLang = sel.find((o) => o.kind === 'summary')?.lang as string | undefined
   const combo = comboRes?.data ?? null
+  const comboQuiz = ((combo?.data as { questions?: Q[] } | null)?.questions ?? []) as Q[]
   const outName = (active?.name ?? '').replace(/\.[^.]+$/, '')
   const anyTranscript = outs.some((o) => o.kind === 'transcript')
   const href = (k: Tab, p: string) => `/subjects/${id}?${activeId ? `f=${activeId}&` : ''}tab=${k}&p=${p}`
@@ -280,7 +281,9 @@ export default async function SubjectPage({
               (summary ? <Markdown dir={dirOf(sLang)}>{summary}</Markdown> : <p className="muted py-10 text-center">{t.ai.noSummary}</p>)}
 
             {tab === 'combo' &&
-              (combo?.content ? (
+              (comboQuiz.length > 0 ? (
+                <QuizRunner key={`combo-${combo?.id}-${comboQuiz.length}`} questions={comboQuiz} mode="quiz" t={t.quiz} rtl={lang !== 'en'} />
+              ) : combo?.content ? (
                 <Markdown dir={dirOf(combo.lang as string)}>{combo.content as string}</Markdown>
               ) : (
                 <p className="muted py-10 text-center">{t.ws.combos}</p>

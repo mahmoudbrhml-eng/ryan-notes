@@ -26,7 +26,8 @@ export type StudioFile = {
   quiz: boolean
 }
 export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'combo'
-type NLang = 'ar' | 'en' | 'fa'
+type NLang = 'ar' | 'en' | 'fa' | 'custom'
+type JobKind = 'notes' | 'summary' | 'quiz'
 
 function Sel<T extends string | number>({
   label, value, onChange, options,
@@ -78,6 +79,8 @@ export default function StudioPanel({
   // the selection box can promise a lossless, instant join.
   const partsGroup = selFiles.length >= 2 ? matchPartGroup(selFiles.map((f) => f.name)) : null
   const [lang, setLang] = useState<NLang>('ar')
+  const [custom, setCustom] = useState('')
+  const [mjob, setMjob] = useState<JobKind>('notes')
   const [length, setLength] = useState<'short' | 'detailed'>('detailed')
   const [count, setCount] = useState(10)
   const [level, setLevel] = useState<'easy' | 'medium' | 'hard'>('medium')
@@ -102,7 +105,26 @@ export default function StudioPanel({
     { v: 'ar' as NLang, l: t.ai.langAr },
     { v: 'en' as NLang, l: t.ai.langEn },
     { v: 'fa' as NLang, l: t.ai.langFa },
+    { v: 'custom' as NLang, l: t.ai.langCustom },
   ]
+  const customText = lang === 'custom' ? custom.trim().slice(0, 600) : undefined
+
+  // The custom-prompt field: only shown when the user picks “Custom prompt”.
+  const customField = lang === 'custom' && (
+    <>
+      <textarea
+        value={custom}
+        onChange={(e) => setCustom(e.target.value)}
+        dir="auto"
+        rows={3}
+        maxLength={600}
+        placeholder={t.ai.customPh}
+        aria-label={t.ai.langCustom}
+        className="field resize-y !text-sm"
+      />
+      <p className="muted text-xs leading-5">{t.studio.customHint}</p>
+    </>
+  )
 
   const toJob = (f: StudioFile): JobFile => ({
     id: f.id, name: f.name, path: f.path, kind: f.kind, mime: f.mime, url: f.url, isLink: f.isLink, subjectId,
@@ -111,18 +133,24 @@ export default function StudioPanel({
   const jobRunning = job?.state === 'running'
 
   function runTranscript(restart: boolean) {
-    if (file) jobs.start(toJob(file), lang, restart)
+    if (file) jobs.start(toJob(file), lang === 'custom' ? 'ar' : lang, restart, customText)
   }
 
   function transcribeMissing() {
-    jobs.startMany(missing.map(toJob), lang)
+    jobs.startMany(missing.map(toJob), lang === 'custom' ? 'ar' : lang, customText)
   }
 
   async function createCombo() {
     setBusy({ kind: 'combo', fileId: null })
     setErr(null)
     try {
-      const r = await postJson('/api/ai/merge', { subjectId, fileIds: selFiles.map((f) => f.id), lang })
+      const r = await postJson('/api/ai/merge', {
+        subjectId,
+        fileIds: selFiles.map((f) => f.id),
+        lang: lang === 'custom' ? 'ar' : lang,
+        custom: customText,
+        job: mjob,
+      })
       sel.clear()
       router.push(`/subjects/${subjectId}?tab=combo&m=${r.id}&p=notes`)
     } catch (e) {
@@ -139,7 +167,7 @@ export default function StudioPanel({
     setBusy({ kind, fileId: fid })
     setErr(null)
     try {
-      await postJson(`/api/ai/${kind}`, kind === 'summary' ? { fileId: fid, lang, length } : { fileId: fid, lang, count, level })
+      await postJson(`/api/ai/${kind}`, kind === 'summary' ? { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, length, custom: customText } : { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, count, level, custom: customText })
       // Only jump to the result if you are still looking at the same source.
       if (activeRef.current === fid) router.push(`/subjects/${subjectId}?f=${fid}&tab=${tab === 'flash' ? 'flash' : kind}&p=notes`)
     } catch (e) {
@@ -201,6 +229,9 @@ export default function StudioPanel({
             ))}
           </ul>
           <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+          {customField}
+          <Sel label={t.studio.job} value={mjob} onChange={setMjob}
+            options={[{ v: 'notes' as JobKind, l: t.studio.jobNotes }, { v: 'summary' as JobKind, l: t.studio.jobSummary }, { v: 'quiz' as JobKind, l: t.studio.jobQuiz }]} />
           {missing.length > 0 ? (
             <button type="button" className="btn btn-primary btn-sm" disabled={missing.some((f) => jobs.jobs[f.id]?.state === 'running')} onClick={transcribeMissing}>
               {t.studio.transcribeMissing.replace('{n}', String(missing.length))}
@@ -208,7 +239,7 @@ export default function StudioPanel({
           ) : (
             <button type="button" className="btn btn-primary btn-sm" disabled={comboBusy} onClick={createCombo}>
               {comboBusy && <span className="spinner" />}
-              {comboBusy ? t.studio.working : t.studio.createCombo}
+              {comboBusy ? t.studio.working : mjob === 'summary' ? t.studio.createSummary : mjob === 'quiz' ? t.studio.createQuiz : t.studio.createCombo}
             </button>
           )}
         </div>
@@ -235,6 +266,7 @@ export default function StudioPanel({
               ) : (
                 <>
                   <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+                  {customField}
                   <div className="flex flex-wrap gap-2">
                     {file.status === 'done' ? (
                       <button type="button" className="btn btn-ghost btn-sm" disabled={jobRunning}
@@ -259,6 +291,7 @@ export default function StudioPanel({
             {tab === 'summary' && (
               <>
                 <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+                {customField}
                 <Sel label={t.studio.length} value={length} onChange={setLength}
                   options={[{ v: 'short', l: t.studio.short }, { v: 'detailed', l: t.studio.detailed }]} />
                 <button type="button" className="btn btn-primary btn-sm" disabled={busyHere || !!needT} onClick={() => runSimple('summary')}>
@@ -272,6 +305,7 @@ export default function StudioPanel({
               <>
                 {tab === 'flash' && <p className="muted text-xs leading-5">{t.studio.flashInfo}</p>}
                 <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+                {customField}
                 <div className="grid grid-cols-2 gap-2">
                   <Sel label={t.studio.count} value={count} onChange={setCount} options={[10, 15, 20, 30].map((n) => ({ v: n, l: String(n) }))} />
                   <Sel label={t.studio.level} value={level} onChange={setLevel}

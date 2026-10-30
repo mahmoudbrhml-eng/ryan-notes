@@ -23,6 +23,7 @@ export type Job = {
   id: string
   file: JobFile
   lang: Lang
+  custom?: string
   pct: number
   msg: string
   state: 'running' | 'done' | 'error'
@@ -31,8 +32,8 @@ export type Job = {
 type Labels = { ai: Dict['ai']; errors: Dict['errors'] }
 type Ctx = {
   jobs: Record<string, Job>
-  start: (f: JobFile, lang: Lang, restart: boolean) => void
-  startMany: (fs: JobFile[], lang: Lang) => void
+  start: (f: JobFile, lang: Lang, restart: boolean, custom?: string) => void
+  startMany: (fs: JobFile[], lang: Lang, custom?: string) => void
 }
 
 const C = createContext<Ctx>({ jobs: {}, start: () => {}, startMany: () => {} })
@@ -56,7 +57,7 @@ export default function JobsProvider({ labels, children }: { labels: Labels; chi
   }
 
   const work = useCallback(
-    async (f: JobFile, lang: Lang, restart: boolean) => {
+    async (f: JobFile, lang: Lang, restart: boolean, custom?: string) => {
       const set = (p: Partial<Job>) => patch(f.id, p)
       set({ pct: 0, msg: L.current.ai.preparing })
       let url = f.url
@@ -65,7 +66,7 @@ export default function JobsProvider({ labels, children }: { labels: Labels; chi
         url = data?.signedUrl ?? ''
       }
       const duration = f.kind === 'media' && url && !f.isLink ? await mediaDuration(url, f.mime.startsWith('video')) : 0
-      const s = await postJson('/api/ai/transcribe', { action: 'start', fileId: f.id, lang, duration, restart })
+      const s = await postJson('/api/ai/transcribe', { action: 'start', fileId: f.id, lang, duration, restart, custom })
       let total = s.total ?? 1
       const done = new Set(s.done ?? [])
       for (let i = 0; i < total; i++) {
@@ -89,12 +90,12 @@ export default function JobsProvider({ labels, children }: { labels: Labels; chi
   )
 
   const execute = useCallback(
-    async (f: JobFile, lang: Lang, restart: boolean) => {
+    async (f: JobFile, lang: Lang, restart: boolean, custom?: string) => {
       if (running.current.has(f.id)) return
       running.current.add(f.id)
-      setJobs((j) => ({ ...j, [f.id]: { id: f.id, file: f, lang, pct: 0, msg: L.current.ai.preparing, state: 'running' } }))
+      setJobs((j) => ({ ...j, [f.id]: { id: f.id, file: f, lang, custom, pct: 0, msg: L.current.ai.preparing, state: 'running' } }))
       try {
-        await work(f, lang, restart)
+        await work(f, lang, restart, custom)
         patch(f.id, { pct: 100, state: 'done', msg: '' })
       } catch (e) {
         patch(f.id, { state: 'error', error: friendly(e) })
@@ -107,11 +108,11 @@ export default function JobsProvider({ labels, children }: { labels: Labels; chi
     [work, patch, router]
   )
 
-  const start = useCallback((f: JobFile, lang: Lang, restart: boolean) => void execute(f, lang, restart), [execute])
+  const start = useCallback((f: JobFile, lang: Lang, restart: boolean, custom?: string) => void execute(f, lang, restart, custom), [execute])
   const startMany = useCallback(
-    (fs: JobFile[], lang: Lang) => {
+    (fs: JobFile[], lang: Lang, custom?: string) => {
       void (async () => {
-        for (const f of fs) await execute(f, lang, false)
+        for (const f of fs) await execute(f, lang, false, custom)
       })()
     },
     [execute]
@@ -159,7 +160,7 @@ export default function JobsProvider({ labels, children }: { labels: Labels; chi
               {j.state === 'error' && (
                 <div className="mt-2 flex flex-col gap-2">
                   <p dir="auto" className="text-xs leading-5 text-danger">{j.error}</p>
-                  <button type="button" className="btn btn-primary btn-sm w-fit" onClick={() => start(j.file, j.lang, false)}>
+                  <button type="button" className="btn btn-primary btn-sm w-fit" onClick={() => start(j.file, j.lang, false, j.custom)}>
                     {labels.ai.resume}
                   </button>
                 </div>

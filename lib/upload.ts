@@ -7,6 +7,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { compressMedia, splitPdf, compressImage, looksLikePdf, looksLikeImage } from '@/lib/compress'
+import type { FilePart } from '@/lib/parts'
 
 export const MAX_MEDIA = 1024 * 1024 * 1024 // media is streamed through the compressor
 export const MAX_DOC = 300 * 1024 * 1024 // PDFs are split in the browser first
@@ -38,8 +39,10 @@ function reportFail(stage: string, file: File, message?: string) {
   }).catch(() => {})
 }
 
-// Prepares one file (compress / split / re-encode as needed) and uploads every
-// resulting part, inserting a `files` row for each. Parts upload sequentially
+// Prepares one file (compress / split / re-encode as needed) and uploads it.
+// A split file is stored as SEVERAL objects but inserted as ONE `files` row:
+// the extra parts live in the row's `parts` jsonb, invisible to the user —
+// transcription later walks them behind the scenes. Parts upload sequentially
 // so a huge lecture never opens many parallel connections on a phone.
 export async function prepareAndUpload(
   file: File,
@@ -113,7 +116,46 @@ export async function prepareAndUpload(
     }
   }
 
-  for (const upFile of up) {
+  // Light per-part metadata so transcription can plan chunks across parts
+  // without re-downloading them: duration for audio, page count for PDFs.
+  // Both are best-effort — the server falls back to size-based estimates.
+  const audioDuration = (f: File): Promise<number | undefined> =>
+    new Promise((ok) => {
+      const a = document.createElement('audio')
+      a.preload = 'metadata'
+      const url = URL.createObjectURL(f)
+      let timer: ReturnType<typeof setTimeout> | null = null
+      const done = (v?: number) => {
+        if (timer) clearTimeout(timer)
+        a.onloadedmetadata = null
+        a.onerror = null
+        URL.revokeObjectURL(url)
+        ok(v)
+      }
+      timer = setTimeout(() => done(undefined), 6000)
+      a.onloadedmetadata = () => done(Number.isFinite(a.duration) && a.duration > 0 ? a.duration : undefined)
+      a.onerror = () => done(undefined)
+      a.src = url
+    })
+  const partMeta = async (f: File): Promise<{ dur?: number; pages?: number }> => {
+    try {
+      if (looksLikePdf(f)) {
+        const { PDFDocument } = await import('pdf-lib')
+        const doc = await PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true })
+        return { pages: doc.getPageCount() }
+      }
+      if (f.type.startsWith('audio/') || /\.(mp3|m4a|wav|ogg|oga|aac|flac|opus|wma|amr)$/i.test(f.name)) {
+        const dur = await audioDuration(f)
+        if (dur) return { dur: Math.round(dur) }
+      }
+    } catch {
+      /* optional — estimation fallbacks cover this */
+    }
+    return {}
+  }
+
+  if (up.length === 1) {
+    const upFile = up[0]
     on('uploading')
     const fileId = crypto.randomUUID()
     const isOriginal = upFile === file
@@ -137,6 +179,42 @@ export async function prepareAndUpload(
       reportFail('db-failed', upFile, dbErr.message)
       return { ok: false, error: dbErr.message }
     }
+    return { ok: true, parts: 1 }
+  }
+
+  // Multi-part: upload every object first, then insert ONE row that owns them
+  // all. If anything fails mid-way, the already-uploaded objects are removed —
+  // a half-uploaded lecture never appears in the user's list.
+  on('uploading')
+  const metas = await Promise.all(up.map(partMeta))
+  const fileId = crypto.randomUUID()
+  const uploaded: string[] = []
+  const partsJson: FilePart[] = []
+  for (let k = 0; k < up.length; k++) {
+    const upFile = up[k]
+    const safe = upFile.name.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
+    const path = `${userId}/${subjectId}/${fileId}-${k + 1}-${safe}`
+    const { error: upErr } = await supabase.storage
+      .from('lecture-files')
+      .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
+    if (upErr) {
+      if (uploaded.length > 0) await supabase.storage.from('lecture-files').remove(uploaded)
+      reportFail('storage-rejected', upFile, upErr.message)
+      const localized = /exceeded the maximum allowed size/i.test(upErr.message) ? msgs.storageLimit : upErr.message
+      return { ok: false, error: localized }
+    }
+    uploaded.push(path)
+    partsJson.push({ path, name: upFile.name, size: upFile.size, ...metas[k] })
+  }
+  const { error: dbErr } = await supabase.from('files').insert({
+    id: fileId, subject_id: subjectId, name: file.name, storage_path: partsJson[0].path,
+    mime: up[0].type || file.type || null, size_bytes: up.reduce((a, f) => a + f.size, 0),
+    parts: partsJson,
+  })
+  if (dbErr) {
+    await supabase.storage.from('lecture-files').remove(uploaded)
+    reportFail('db-failed', file, dbErr.message)
+    return { ok: false, error: dbErr.message }
   }
 
   return { ok: true, parts: up.length }

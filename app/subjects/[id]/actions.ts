@@ -12,12 +12,18 @@ export async function deleteFile(formData: FormData) {
   // RLS only returns the row if it belongs to the signed-in user.
   const { data: file } = await supabase
     .from('files')
-    .select('storage_path')
+    .select('storage_path, parts')
     .eq('id', id)
     .single()
   if (!file) return
 
-  await supabase.storage.from('lecture-files').remove([file.storage_path])
+  // A hidden multi-part source keeps its extra objects in `parts` — they must
+  // go with it, or storage fills up with orphaned lecture chunks.
+  const paths = [file.storage_path]
+  for (const p of (file.parts as { path?: string }[] | null) ?? []) {
+    if (p?.path && !paths.includes(p.path)) paths.push(p.path)
+  }
+  await supabase.storage.from('lecture-files').remove(paths)
   const { error } = await supabase.from('files').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(`/subjects/${subjectId}`)

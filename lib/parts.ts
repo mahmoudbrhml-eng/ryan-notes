@@ -35,3 +35,32 @@ export function matchPartGroup(names: string[]): { base: string; total: number; 
     .map((x) => x.n)
   return { base, total, ordered }
 }
+
+// ---------------------------------------------------------------------------
+// Hidden multi-part sources: a split upload is ONE `files` row whose `parts`
+// jsonb holds every storage object (part 0 = the row's own storage_path).
+// The user only ever sees one record; the parts exist purely behind the scenes.
+export type FilePart = { path: string; name: string; size: number; dur?: number; pages?: number }
+
+// Chunk planning: each part contributes its own chunks (audio: ceil(dur/SEG),
+// PDF: ceil(pages/PAGES)) and the global chunk index maps deterministically to
+// [part, local chunk inside that part]. counts[p] must be >= 1.
+export function planChunks(counts: number[]): { part: number; local: number }[] {
+  const out: { part: number; local: number }[] = []
+  for (let p = 0; p < counts.length; p++) {
+    const n = Math.max(1, Math.ceil(counts[p]))
+    for (let j = 0; j < n; j++) out.push({ part: p, local: j })
+  }
+  return out
+}
+
+// Legacy rows carry no per-part durations. Distribute a known total duration
+// across parts proportionally to their bytes (same recording => same bitrate),
+// or fall back to a 128 kbps estimate when even the total is unknown.
+export function spreadDuration(total: number, sizes: number[]): number[] {
+  if (total > 0 && sizes.length > 0 && sizes.every((s) => s > 0)) {
+    const sum = sizes.reduce((a, b) => a + b, 0)
+    return sizes.map((s) => (total * s) / sum)
+  }
+  return sizes.map((s) => (s > 0 ? s / 16000 : 600)) // ~128 kbps bytes/sec
+}

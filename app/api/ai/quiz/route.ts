@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     if (!UUID.test(fileId)) return fail('Invalid file')
     const bl = body.lang
     const lang: NotesLang = bl === 'en' || bl === 'fa' ? bl : 'ar'
+    const custom = typeof body.custom === 'string' ? body.custom.trim().slice(0, 600) : ''
     const bv = body.level
     const level: QuizLevel = bv === 'easy' || bv === 'hard' ? bv : 'medium'
     const count = Math.min(30, Math.max(5, Math.round(Number(body.count) || 10)))
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
     const { data: used } = await supabase.rpc('bump_usage')
     if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
-    const raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level) }], {
+    const raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level, custom) }], {
       json: true, max: 14000,
     })
     const questions = parseQuiz(raw)
@@ -70,10 +71,10 @@ export async function POST(req: Request) {
     const data = { questions, level, count: questions.length }
     const { data: existing } = await supabase
       .from('outputs').select('id').eq('file_id', fileId).eq('kind', 'quiz').maybeSingle()
-    if (existing) await supabase.from('outputs').update({ data, lang }).eq('id', existing.id)
+    if (existing) await supabase.from('outputs').update({ data, lang: custom ? 'custom' : lang }).eq('id', existing.id)
     else
       await supabase.from('outputs').insert({
-        subject_id: tr.subject_id, file_id: fileId, kind: 'quiz', title: tr.title, lang, content: '', data,
+        subject_id: tr.subject_id, file_id: fileId, kind: 'quiz', title: tr.title, lang: custom ? 'custom' : lang, content: '', data,
       })
     return NextResponse.json({ ok: true, count: questions.length })
   } catch (e) {
