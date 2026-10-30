@@ -34,7 +34,7 @@ const CORE_BASES = [
 ]
 
 type FFmpegLike = {
-  load(cfg: { coreURL: string; wasmURL: string; classWorkerURL: string }): Promise<boolean>
+  load(cfg: { coreURL: string; wasmURL: string; classWorkerURL?: string }): Promise<boolean>
   exec(args: string[]): Promise<number>
   mount(fsType: string, options: unknown, mountPoint: string): Promise<boolean>
   unmount(mountPoint: string): Promise<boolean>
@@ -105,26 +105,47 @@ function getEngine(onStage?: (s: Stage) => void): Promise<FFmpegLike> {
       await firstOK(UTIL_BASES, 'util.js', loadScript)
       if (!window.FFmpegUtil) throw new Error('util global missing')
       const { toBlobURL } = window.FFmpegUtil
-      const ff = new window.FFmpegWASM.FFmpeg()
-      // The wasm core is ~31MB: allow several minutes on slow connections.
       const [coreURL, wasmURL] = await Promise.all([
         firstOK(CORE_BASES, 'ffmpeg-core.js', (u) => withTimeout(toBlobURL(u, 'text/javascript'), 90000)),
         firstOK(CORE_BASES, 'ffmpeg-core.wasm', (u) => withTimeout(toBlobURL(u, 'application/wasm'), 300000)),
       ])
-      const classWorkerURL = await firstOK(FFMPEG_BASES, '814.ffmpeg.js', (u) =>
-        withTimeout(toBlobURL(u, 'text/javascript'), 60000),
-      )
-      // The core is ~31MB; give it room on slow connections (2 tries total).
-      for (let i = 0; ; i++) {
+      // The self-hosted core is the UMD build: it has NO ES default export and
+      // only runs via importScripts, which exists in CLASSIC workers. Calling
+      // load() WITHOUT classWorkerURL is therefore required — ffmpeg.wasm then
+      // spawns its own classic worker from the same origin (/ffmpeg/814.ffmpeg.js).
+      // Passing classWorkerURL forces a MODULE worker, where importScripts is
+      // unavailable and `import(umdCore).default` is undefined, so every load
+      // died with "failed to import ffmpeg-core.js" (this exact error made all
+      // m4a uploads fail while MP3s kept working — the JS splitter needs no
+      // engine). Verified in a real browser: old path throws, this path loads,
+      // splits an m4a losslessly and recompresses to mp3.
+      try {
+        const ff = new window.FFmpegWASM.FFmpeg()
+        await ff.load({ coreURL, wasmURL })
+        return ff
+      } catch (primary) {
+        // Rescue path: module worker + the ESM core (which does ship an ES
+        // default export). Also covers the rare case where ffmpeg.js itself
+        // came from a CDN and the default same-origin worker URL is blocked.
+        const ESM_BASES = [
+          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm/',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',
+        ]
+        const [esmCore, esmWasm] = await Promise.all([
+          firstOK(ESM_BASES, 'ffmpeg-core.js', (u) => withTimeout(toBlobURL(u, 'text/javascript'), 90000)),
+          firstOK(ESM_BASES, 'ffmpeg-core.wasm', (u) => withTimeout(toBlobURL(u, 'application/wasm'), 300000)),
+        ])
+        const classWorkerURL = await firstOK(FFMPEG_BASES, '814.ffmpeg.js', (u) =>
+          withTimeout(toBlobURL(u, 'text/javascript'), 60000),
+        )
         try {
-          await ff.load({ coreURL, wasmURL, classWorkerURL })
-          break
-        } catch (e) {
-          if (i >= 1) throw e
-          await sleep(1500)
+          const ff = new window.FFmpegWASM.FFmpeg()
+          await ff.load({ coreURL: esmCore, wasmURL: esmWasm, classWorkerURL })
+          return ff
+        } catch (secondary) {
+          throw primary instanceof Error ? primary : secondary
         }
       }
-      return ff
     })().catch((e) => {
       engine = null
       throw e
