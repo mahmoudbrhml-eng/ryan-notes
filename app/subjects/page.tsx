@@ -27,7 +27,7 @@ export default async function SubjectsPage() {
 
   return (
     <AppShell>
-      <SubjectsBrowser items={items} t={t.home} />
+      <SubjectsBrowser items={items} t={t.home} usage={t.usage} />
     </AppShell>
   )
 }

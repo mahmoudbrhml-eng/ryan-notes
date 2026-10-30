@@ -5,6 +5,7 @@ import { SYS, reviewPrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
 import { parsePartName, planChunks, spreadDuration, type FilePart } from '@/lib/parts'
+import { tracker } from '@/lib/usage'
 import { PDFDocument } from 'pdf-lib'
 
 export const maxDuration = 300
@@ -105,6 +106,7 @@ async function handle(req: Request) {
 
   const keys = apiKeys()
   if (keys.length === 0) return fail('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503, 'config')
+  const trk = tracker(supabase, 'transcribe')
 
   const { data: file } = await supabase
     .from('files')
@@ -118,7 +120,7 @@ async function handle(req: Request) {
 
   const plist = normalizeParts(file.parts, file.storage_path, file.name)
 
-  const { data: used } = await supabase.rpc('bump_usage')
+  const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'transcribe' })
   if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
   const { data: out } = await supabase
@@ -201,7 +203,7 @@ async function handle(req: Request) {
                 { fileData: { fileUri: file.source_url as string } },
                 { text: 'Reply with ONLY the total duration of this video in seconds, as a single integer.' },
               ],
-              { light: true, max: 20, budgetMs: 25000 }
+              { light: true, max: 20, budgetMs: 25000, track: trk }
             )
             dur = parseInt(ans.replace(/[^0-9]/g, ''), 10) || 0
           } catch {
@@ -326,7 +328,7 @@ async function handle(req: Request) {
       if (!reviewed[String(i)]) {
         let polished = raw
         try {
-          const txt = await generate([{ text: reviewPrompt(raw) }], { max: 16000 })
+          const txt = await generate([{ text: reviewPrompt(raw) }], { max: 16000, track: trk })
           const cleaned = cleanMarkdown(txt)
           // Never accept a version that lost a large part of the content.
           if (cleaned.length >= raw.length * 0.6) polished = cleaned
@@ -420,7 +422,7 @@ async function handle(req: Request) {
 
     let text: string
     try {
-      text = await generate(parts, { max: 16000, pinned, keyIndex: gemRec?.key })
+      text = await generate(parts, { max: 16000, pinned, keyIndex: gemRec?.key, track: trk })
     } catch (e) {
       // This key is out of quota: move the current part to the next key and ask the browser to retry.
       if (e instanceof GeminiError && e.code === 'quota' && pinned && keys.length > 1 && gemRec?.mime) {

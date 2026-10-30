@@ -1,4 +1,13 @@
 export const en = {
+  usage: {
+    chip: 'AI usage today',
+    transcribe: 'Transcript',
+    summary: 'Summary',
+    quiz: 'Quiz',
+    chat: 'Tutor',
+    merge: 'Combined',
+    other: 'Other',
+  },
   soon: 'Soon',
   signOut: 'Sign out',
   lang: 'العربية',
@@ -158,6 +167,15 @@ export const en = {
 export type Dict = typeof en
 
 export const ar: Dict = {
+  usage: {
+    chip: 'استخدام الـAI النهاردة',
+    transcribe: 'التفريغ',
+    summary: 'الملخص',
+    quiz: 'الاختبار',
+    chat: 'المدرّس',
+    merge: 'الملاحظات المجمّعة',
+    other: 'أخرى',
+  },
   soon: 'قريبًا',
   signOut: 'تسجيل خروج',
   lang: 'English',

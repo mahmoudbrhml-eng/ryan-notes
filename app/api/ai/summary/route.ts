@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { summaryPrompt, continueSummaryPrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown, sliceText } from '@/lib/clean'
+import { tracker } from '@/lib/usage'
 
 export const maxDuration = 300
 
@@ -17,14 +18,14 @@ const fail = (error: string, status = 400, code = 'other') => NextResponse.json(
 // turning into a 3-page digest.
 const minDetailed = (srcLen: number) => Math.max(6000, Math.min(30000, Math.floor(srcLen * 0.4)))
 
-async function writeDetailed(lang: NotesLang, src: string, custom?: string): Promise<string> {
+async function writeDetailed(lang: NotesLang, src: string, custom?: string, track?: (i: { keyIndex: number; model: string; ok: boolean; status: number | null; inTokens: number | null; outTokens: number | null; ms: number }) => void): Promise<string> {
   const started = Date.now()
   const left = () => 300000 - (Date.now() - started) // stay under the function cap
-  let text = await generate([{ text: summaryPrompt(lang, src, 'detailed', custom) }], { max: 30000, budgetMs: 120000 })
+  let text = await generate([{ text: summaryPrompt(lang, src, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track })
   text = cleanMarkdown(text)
   for (let pass = 0; pass < 2 && text.length < minDetailed(src.length); pass++) {
     if (left() < 90000) break // not enough time for another safe pass
-    const more = await generate([{ text: continueSummaryPrompt(lang, text, src, custom) }], { max: 24000, budgetMs: 80000 })
+    const more = await generate([{ text: continueSummaryPrompt(lang, text, src, custom) }], { max: 24000, budgetMs: 80000, track })
     const clean = cleanMarkdown(more)
     if (clean.length < 400) break // nothing meaningful came back: stop here
     text = `${text}\n\n${clean}`
@@ -50,8 +51,9 @@ export async function POST(req: Request) {
       .maybeSingle()
     if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage')
+    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'summary' })
     if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    const trk = tracker(supabase, 'summary')
 
     const bl = body.lang
     const lang: NotesLang = bl === 'en' || bl === 'fa' || bl === 'ar' ? bl : (['ar', 'en', 'fa'].includes(tr.lang) ? (tr.lang as NotesLang) : 'ar')
@@ -62,16 +64,16 @@ export async function POST(req: Request) {
     // long, and a tight cap would silently truncate it mid-sentence.
     let text: string
     if (tr.content.length <= 90000) {
-      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, tr.content, 'short', custom) }], { max: 8000 })
-      else text = await writeDetailed(lang, tr.content, custom)
+      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, tr.content, 'short', custom) }], { max: 8000, track: trk })
+      else text = await writeDetailed(lang, tr.content, custom, trk)
     } else {
       const partials: string[] = []
       for (const slice of sliceText(tr.content, 60000).slice(0, 8)) {
-        partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed', custom) }], { max: 20000 }))
+        partials.push(await generate([{ text: summaryPrompt(lang, slice, 'detailed', custom) }], { max: 20000, track: trk }))
       }
       const joined = partials.join('\n\n')
-      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000 })
-      else text = await writeDetailed(lang, joined, custom)
+      if (length === 'short') text = await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: trk })
+      else text = await writeDetailed(lang, joined, custom, trk)
     }
     text = cleanMarkdown(text)
 

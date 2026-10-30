@@ -71,12 +71,34 @@ export type GeminiPart = { text: string } | { fileData: { mimeType?: string; fil
 
 type GenResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[]
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number }
   error?: { message?: string }
+}
+
+// One Gemini HTTP attempt, reported through the optional `track` callback so
+// routes can log real consumption (which key, which model, tokens, duration).
+// This is what answers "do we need more keys?" with numbers.
+export type CallInfo = {
+  keyIndex: number
+  model: string
+  ok: boolean
+  status: number | null
+  inTokens: number | null
+  outTokens: number | null
+  ms: number
 }
 
 export async function generate(
   parts: GeminiPart[],
-  o: { light?: boolean; json?: boolean; max?: number; keyIndex?: number; pinned?: boolean; budgetMs?: number } = {}
+  o: {
+    light?: boolean
+    json?: boolean
+    max?: number
+    keyIndex?: number
+    pinned?: boolean
+    budgetMs?: number
+    track?: (i: CallInfo) => void
+  } = {}
 ): Promise<string> {
   const ks = apiKeys()
   if (ks.length === 0) throw new GeminiError('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503, 'config')
@@ -111,6 +133,7 @@ export async function generate(
             else if (m.startsWith('gemini-3')) gc.thinkingConfig = { thinkingLevel: 'low' }
           }
           let r: Response
+          const t0 = Date.now()
           try {
             r = await fetch(`${G}v1beta/models/${m}:generateContent`, {
               method: 'POST',
@@ -121,9 +144,19 @@ export async function generate(
           } catch (e) {
             last = e instanceof Error ? e.message : 'Network error'
             only404 = false
+            o.track?.({ keyIndex: ki, model: m, ok: false, status: null, inTokens: null, outTokens: null, ms: Date.now() - t0 })
             break
           }
           const j = (await r.json().catch(() => ({}))) as GenResponse
+          o.track?.({
+            keyIndex: ki,
+            model: m,
+            ok: r.ok && !!(j.candidates?.[0]?.content?.parts ?? []).some((x) => x.text),
+            status: r.status,
+            inTokens: j.usageMetadata?.promptTokenCount ?? null,
+            outTokens: j.usageMetadata?.candidatesTokenCount ?? null,
+            ms: Date.now() - t0,
+          })
           if (r.ok) {
             const t = (j.candidates?.[0]?.content?.parts ?? []).map((x) => x.text ?? '').join('')
             if (t) produced = t

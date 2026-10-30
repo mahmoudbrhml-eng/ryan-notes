@@ -5,12 +5,19 @@ import Link from 'next/link'
 import Icon from './Icon'
 import ConfirmButton from './ConfirmButton'
 import SubmitButton from './SubmitButton'
+import UsageBadge from './UsageBadge'
 import { createSubject, deleteSubject } from '@/app/subjects/actions'
 import type { Dict } from '@/lib/dict'
 
 export type SubjectItem = { id: string; name: string; files: number; date: string; tint: number }
 
-export default function SubjectsBrowser({ items, t }: { items: SubjectItem[]; t: Dict['home'] }) {
+export default function SubjectsBrowser({
+  items, t, usage,
+}: {
+  items: SubjectItem[]
+  t: Dict['home']
+  usage: Dict['usage']
+}) {
   const [q, setQ] = useState('')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [adding, setAdding] = useState(false)
@@ -19,7 +26,10 @@ export default function SubjectsBrowser({ items, t }: { items: SubjectItem[]; t:
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-16 md:px-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">{t.title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-3xl font-bold">{t.title}</h1>
+          <UsageBadge t={usage} />
+        </div>
         <p className="muted mt-1">{t.sub}</p>
       </div>
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
 import { sampleText } from '@/lib/clean'
+import { tracker } from '@/lib/usage'
 
 export const maxDuration = 300
 
@@ -59,11 +60,11 @@ export async function POST(req: Request) {
       .maybeSingle()
     if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage')
+    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'quiz' })
     if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
     const raw = await generate([{ text: quizPrompt(lang, sampleText(tr.content, 100000), count, level, custom) }], {
-      json: true, max: 14000,
+      json: true, max: 14000, track: tracker(supabase, 'quiz'),
     })
     const questions = parseQuiz(raw)
     if (questions.length === 0) return fail('The AI returned an unreadable quiz. Press Generate again.', 502)

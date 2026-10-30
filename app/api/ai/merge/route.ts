@@ -4,6 +4,7 @@ import { GeminiError, generate } from '@/lib/gemini'
 import { mergePrompt, quizPrompt, summaryPrompt, continueSummaryPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
 import { cleanMarkdown, sampleText } from '@/lib/clean'
 import { matchPartGroup } from '@/lib/parts'
+import { tracker } from '@/lib/usage'
 
 export const maxDuration = 300
 
@@ -97,9 +98,12 @@ export async function POST(req: Request) {
 
     // The verbatim notes join needs no AI at all: skip the usage counter for it.
     const verbatimNotes = job === 'notes' && !!group
+    let mergeTrk: ReturnType<typeof tracker> | undefined
     if (!verbatimNotes) {
-      const { data: used } = await supabase.rpc('bump_usage')
+      const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'merge' })
       if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+      const trk = tracker(supabase, 'merge')
+      mergeTrk = trk
     }
 
     const insertMerged = async (title: string, content: string, data: Record<string, unknown>) => {
@@ -119,11 +123,11 @@ export async function POST(req: Request) {
     if (job === 'summary') {
       let out: string
       if (length === 'short') {
-        out = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000 }))
+        out = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: mergeTrk }))
       } else {
-        let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000 }))
+        let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: mergeTrk }))
         for (let pass = 0; pass < 2 && t.length < minDetailed(joined.length); pass++) {
-          const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000 })
+          const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000, track: mergeTrk })
           const clean = cleanMarkdown(more)
           if (clean.length < 400) break
           t = `${t}\n\n${clean}`
@@ -137,7 +141,7 @@ export async function POST(req: Request) {
     // ---- one combined quiz from all selected transcripts ----
     if (job === 'quiz') {
       const raw = await generate([{ text: quizPrompt(lang, sampleText(joined, 100000), count, level, custom) }], {
-        json: true, max: 14000,
+        json: true, max: 14000, track: mergeTrk,
       })
       const questions = parseQuiz(raw)
       if (questions.length === 0) return fail('The AI returned an unreadable quiz. Try again.', 502)
@@ -158,7 +162,7 @@ export async function POST(req: Request) {
 
     const raw = await generate(
       [{ text: mergePrompt(lang, sourceList.map((s) => ({ name: s.name, text: sampleText(text.get(s.id) ?? '', 60000) })), custom) }],
-      { max: 16000 }
+      { max: 16000, track: mergeTrk }
     )
     const content = cleanMarkdown(raw)
     const title = content.match(/^#{1,2} (.+)$/m)?.[1] ?? baseTitle

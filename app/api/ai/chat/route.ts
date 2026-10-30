@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { chatSystem, type ChatMode, type NotesLang } from '@/lib/prompts'
 import { pickRelevant } from '@/lib/retrieve'
+import { tracker } from '@/lib/usage'
 
 export const maxDuration = 300
 
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
     const material = (rows ?? []).filter((r) => r.content)
     if (material.length === 0) return fail('Transcribe a lecture first, then ask questions here.', 409, 'need_transcript')
 
-    const { data: used } = await supabase.rpc('bump_usage')
+    const { data: used } = await supabase.rpc('bump_usage', { p_feature: 'chat' })
     if (typeof used === 'number' && used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
 
     // Small material is sent whole; large material is reduced to the passages that match the question.
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
       70000
     )
     const prompt = `${chatSystem(mode, lang)}\n\nLECTURE MATERIAL:\n${context}\n\nCONVERSATION:\n${convo}\nStudent: ${message}\nTutor:`
-    const reply = await generate([{ text: prompt }], { max: 4000 })
+    const reply = await generate([{ text: prompt }], { max: 4000, track: tracker(supabase, 'chat') })
     return NextResponse.json({ reply: reply.trim() })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)
