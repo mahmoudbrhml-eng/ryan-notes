@@ -15,6 +15,20 @@ export async function createSubject(formData: FormData) {
   revalidatePath('/subjects')
 }
 
+// Called directly from the client "new subject" button so it can hand back the
+// id and the app can jump straight into the fresh subject (also from inside
+// another subject — no need to go back to the home page first).
+export async function addSubject(name: string): Promise<string | null> {
+  const n = name.trim()
+  if (!n || n.length > 120) return null
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('subjects').insert({ name: n }).select('id').single()
+  if (error) throw new Error(error.message)
+  revalidatePath('/subjects')
+  return data.id
+}
+
 export async function deleteSubject(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   if (!id) return

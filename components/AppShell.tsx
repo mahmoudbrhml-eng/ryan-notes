@@ -4,6 +4,7 @@ import Logo from './Logo'
 import LangToggle from './LangToggle'
 import ThemeToggle from './ThemeToggle'
 import Menu from './Menu'
+import NewSubject from './NewSubject'
 import { signOut } from '@/app/subjects/actions'
 import { getI18n } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase/server'
@@ -41,6 +42,7 @@ export default async function AppShell({
           </h1>
         )}
         {!title && <div className="flex-1" />}
+        <NewSubject label={t.home.newSubject} ph={t.home.namePh} create={t.home.create} cancel={t.home.cancel} />
         <LangToggle lang={lang} label={t.lang} />
         <ThemeToggle theme={theme} labels={{ system: t.theme.system, light: t.theme.light, dark: t.theme.dark }} />
         <Menu

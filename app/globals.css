@@ -119,6 +119,14 @@ html { scroll-behavior: smooth; }
 
 .md { line-height: 1.95; font-size: 16px; }
 .read-md .md { font-size: calc(16px * var(--read-fs, 1)); line-height: calc(1.95 * var(--read-lh, 1)); }
+/* --read-gap scales every vertical gap (paragraphs, lists, headings, quotes)
+   in the reading view only — the printable PDF keeps its own fixed spacing. */
+.read-md .md p { margin: calc(.6rem * var(--read-gap, 1)) 0; }
+.read-md .md ul, .read-md .md ol { margin: calc(.6rem * var(--read-gap, 1)) 0; }
+.read-md .md li { margin: calc(.25rem * var(--read-gap, 1)) 0; }
+.read-md .md h2 { margin: calc(2rem * var(--read-gap, 1)) 0 calc(.75rem * var(--read-gap, 1)); }
+.read-md .md h3 { margin: calc(1.5rem * var(--read-gap, 1)) 0 calc(.5rem * var(--read-gap, 1)); }
+.read-md .md blockquote { margin: calc(1rem * var(--read-gap, 1)) 0; }
 .md :is(p, li, h1, h2, h3, h4, blockquote, td, th) { unicode-bidi: plaintext; text-align: start; }
 .md h2 { font-size: 1.35em; font-weight: 700; margin: 2rem 0 .75rem; color: var(--brand); scroll-margin-top: 90px; }
 .md h3 { font-size: 1.12em; font-weight: 700; margin: 1.5rem 0 .5rem; color: var(--navy); scroll-margin-top: 90px; }
