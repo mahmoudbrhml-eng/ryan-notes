@@ -5,6 +5,7 @@ import { PRINT_CSS } from '@/lib/printCss'
 import {
   buildDocHtml, buildTocItems, cleanTopic, topicFrom, safePdfName, markdownToHtml, FALLBACK_CSS,
 } from '@/lib/pdfdoc'
+import { fixArabicTextLayer } from '@/lib/pdffix'
 import { createClient } from '@/lib/supabase/server'
 import type { Browser } from 'puppeteer-core'
 
@@ -135,10 +136,15 @@ export async function POST(req: Request) {
     ok = true
     errMsg = null
 
+    // Chromium writes Arabic ligature glyphs with broken ToUnicode entries
+    // (presentation forms, missing lam-alef) — copy/search/OCR then read wrong
+    // words. Rewrite the text layer to logical letters; rendering is untouched.
+    const cleaned = await fixArabicTextLayer(new Uint8Array(pdf))
+
     const ascii = safePdfName(title).replace(/[^\x20-\x7E]/g, '') || 'ryan-notes'
     void report(uid, doc, mode, pages, srcLen, outLen, Date.now() - t0, true, null, req.headers.get('user-agent') ?? '')
 
-    return new NextResponse(new Uint8Array(pdf), {
+    return new NextResponse(cleaned as unknown as BodyInit, {
       headers: {
         'content-type': 'application/pdf',
         'content-disposition': `attachment; filename="${ascii}.pdf"; filename*=UTF-8''${encodeURIComponent(safePdfName(title))}.pdf`,
