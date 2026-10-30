@@ -6,6 +6,7 @@ import ExportButtons from '@/components/ExportButtons'
 import Icon, { type IconName } from '@/components/Icon'
 import Markdown, { tocOf } from '@/components/Markdown'
 import PanelSwipe from '@/components/PanelSwipe'
+import QuickAdd from '@/components/QuickAdd'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
 import ReadControls from '@/components/ReadControls'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
@@ -176,6 +177,8 @@ export default async function SubjectPage({
               )}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
+              {/* add a new note from inside the reading view — no panel switch, no going back */}
+              <QuickAdd subjectId={subject.id} userId={userId} t={t} />
               {tab !== 'chat' && tab !== 'overview' && <ReadControls labels={t.read} />}
               {tab === 'transcript' && transcript && (
                 <ExportButtons text={transcript} filename={`${outName}.md`} pdfHref={pdfHref('transcript')} labels={exportLabels} />

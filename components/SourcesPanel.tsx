@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { compressMedia, splitPdf, compressImage, looksLikePdf, looksLikeImage } from '@/lib/compress'
 import { deleteFile } from '@/app/subjects/[id]/actions'
+import { prepareAndUpload, type PrepStage } from '@/lib/upload'
 import Icon, { type IconName } from './Icon'
 import Menu from './Menu'
 import { useSelection } from './Selection'
@@ -21,24 +20,9 @@ type Pending = {
   pct?: number
 }
 
-// Supabase caps every stored object (~50MB on the free plan) no matter what the
-// bucket config says, so nothing above ~48MB may go to storage untouched:
-// - audio/video above COMPRESS_ABOVE is compressed to a small mono MP3 in the
-//   browser first (lib/compress), which is also what keeps uploads fast;
-// - PDFs above COMPRESS_ABOVE are split into several smaller sources with no
-//   quality loss;
-// - images above COMPRESS_ABOVE are re-encoded as JPEG until they fit.
-// If the in-browser tool fails, only files that already fit are uploaded
-// as-is; anything bigger gets a clear message instead of a doomed upload.
-const MAX_MEDIA = 1024 * 1024 * 1024 // media is streamed through the compressor
-const MAX_DOC = 300 * 1024 * 1024 // PDFs are split in the browser first
-const SAFE_RAW = 48 * 1024 * 1024 // largest object uploaded untouched
-const COMPRESS_ABOVE = 45 * 1024 * 1024
-
-const isMedia = (f: File) =>
-  /^(audio|video)\//.test(f.type) ||
-  /\.(mp3|m4a|wav|ogg|oga|aac|flac|mp4|webm|mov|mkv|avi|3gp|amr|opus|wma)$/i.test(f.name)
-
+// One source adder used here and by the quick "+" button in the notes header
+// (components/QuickAdd.tsx) — both run the same shared pipeline (lib/upload)
+// so every file above the ~50MB storage cap is prepared in the browser first.
 export default function SourcesPanel({
   subjectId, userId, files, activeId, hideOnMobile, t,
 }: {
@@ -67,135 +51,27 @@ export default function SourcesPanel({
     setPending((p) => p.filter((x) => x.state !== 'done'))
   }, [files])
 
-  // Fire-and-forget failure report so device-side errors are visible to us
-  // (the exact answer to "why does it always fail here?"). Never blocks.
-  const logFail = (stage: string, file: File, message?: string) => {
-    void fetch('/api/log/upload', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ stage, name: file.name, size: file.size, mime: file.type, message: message ?? null }),
-      keepalive: true,
-    }).catch(() => {})
+  async function runOne(file: File, key: string) {
+    const mark = (state: Pending['state'], error?: string, pct?: number) =>
+      setPending((p) => p.map((x) => (x.key === key ? { ...x, state, error, pct } : x)))
+    mark('uploading')
+    const r = await prepareAndUpload(file, {
+      userId,
+      subjectId,
+      msgs: { storageLimit: t.src.storageLimit, compressBigFail: t.src.compressBigFail, splitFail: t.src.splitFail, tooBig: t.upload.tooBig },
+      on: (s: PrepStage, pct?: number) => mark(s, undefined, pct),
+    })
+    if (r.ok) mark('done')
+    else mark('error', r.error)
+    router.refresh()
   }
 
   async function uploadFiles(list: File[]) {
     if (list.length === 0) return
-    const supabase = createClient()
     const items: Pending[] = list.map((f) => ({ key: crypto.randomUUID(), name: f.name, state: 'uploading' }))
     setPending((p) => [...items, ...p])
-    const mark = (key: string, state: Pending['state'], error?: string, pct?: number) =>
-      setPending((p) => p.map((x) => (x.key === key ? { ...x, state, error, pct } : x)))
-
     for (let i = 0; i < list.length; i++) {
-      const file = list[i]
-      const key = items[i].key
-      const media = isMedia(file)
-      if (file.size > (media ? MAX_MEDIA : MAX_DOC)) {
-        logFail('too-big', file)
-        mark(key, 'error', t.upload.tooBig)
-        continue
-      }
-
-      // Decide what actually goes to storage: the file itself, a compressed
-      // version, or a list of PDF parts. Anything above the ~50MB storage cap
-      // must be made smaller in the browser first; media is compressed from
-      // 45MB up because that also makes uploads much faster.
-      let up: File[] = [file]
-      if (media && file.size > COMPRESS_ABOVE) {
-        let ok = false
-        let lastMsg = ''
-        for (let attempt = 0; !ok && attempt < 2; attempt++) {
-          try {
-            const r = await compressMedia(
-              file,
-              (pct) => mark(key, 'compressing', undefined, pct),
-              (s) => mark(key, s === 'split' ? 'splitting' : 'tooling'),
-            )
-            up = r.files
-            ok = true
-          } catch (e) {
-            lastMsg = e instanceof Error ? e.message : String(e)
-          }
-        }
-        if (!ok) {
-          logFail('compress-failed', file, lastMsg)
-          if (file.size > SAFE_RAW) {
-            mark(key, 'error', t.src.compressBigFail)
-            continue
-          }
-          up = [file] // small enough to upload as-is
-        }
-      } else if (looksLikePdf(file) && file.size > SAFE_RAW) {
-        let parts: File[] | null = null
-        let lastMsg = ''
-        for (let attempt = 0; !parts && attempt < 2; attempt++) {
-          try {
-            parts = await splitPdf(
-              file,
-              () => mark(key, 'tooling'),
-              (a, b) => mark(key, 'splitting', undefined, Math.round((a / b) * 100)),
-            )
-          } catch (e) {
-            lastMsg = e instanceof Error ? e.message : String(e)
-          }
-        }
-        if (!parts || parts.length === 0) {
-          logFail('split-failed', file, lastMsg)
-          mark(key, 'error', t.src.splitFail)
-          continue
-        }
-        up = parts
-      } else if (looksLikeImage(file) && file.size > SAFE_RAW) {
-        try {
-          const small = await compressImage(file)
-          if (!small) {
-            logFail('image-failed', file, 'no output produced')
-            mark(key, 'error', t.src.compressBigFail)
-            continue
-          }
-          up = [small]
-        } catch (e) {
-          logFail('image-failed', file, e instanceof Error ? e.message : String(e))
-          mark(key, 'error', t.src.compressBigFail)
-          continue
-        }
-      }
-
-      let failed = false
-      for (const upFile of up) {
-        mark(key, 'uploading')
-        const fileId = crypto.randomUUID()
-        const isOriginal = upFile === file
-        const finalName = isOriginal ? file.name : upFile.name
-        const safe = finalName.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
-        const path = `${userId}/${subjectId}/${fileId}-${safe}`
-        const { error: upErr } = await supabase.storage
-          .from('lecture-files')
-          .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
-        if (upErr) {
-          logFail('storage-rejected', upFile, upErr.message)
-          mark(key, 'error', friendlyStorage(upErr.message))
-          failed = true
-          break
-        }
-        const { error: dbErr } = await supabase.from('files').insert({
-          id: fileId, subject_id: subjectId, name: finalName, storage_path: path,
-          mime: upFile.type || null, size_bytes: upFile.size,
-        })
-        if (dbErr) {
-          await supabase.storage.from('lecture-files').remove([path])
-          logFail('db-failed', upFile, dbErr.message)
-          mark(key, 'error', dbErr.message)
-          failed = true
-          break
-        }
-      }
-      if (!failed) mark(key, 'done')
-      router.refresh()
-    }
-
-    function friendlyStorage(raw: string) {
-      return /exceeded the maximum allowed size/i.test(raw) ? t.src.storageLimit : raw
+      await runOne(list[i], items[i].key)
     }
   }
 
