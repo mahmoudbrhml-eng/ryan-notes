@@ -31,6 +31,7 @@ export default function PagedDoc({
   docKind,
   rtl,
   labels,
+  payload,
   children,
 }: {
   backHref: string
@@ -38,12 +39,14 @@ export default function PagedDoc({
   docKind?: string
   rtl?: boolean
   labels: { print: string; hint: string; back: string; building: string; again: string; save: string; saved: string }
+  payload: { subjectId: string; kind: 'transcript' | 'summary' | 'merged'; fileId?: string; mergedId?: string }
   children: ReactNode
 }) {
   const src = useRef<HTMLDivElement>(null)
   const out = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'working' | 'ready' | 'fallback'>('working')
   const [save, setSave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const [engine, setEngine] = useState<'server' | 'images'>('server')
   const autoTried = useRef(false)
   const saving = useRef(false)
   // Render facts kept for the telemetry report (the source unmounts when ready).
@@ -76,10 +79,36 @@ export default function PagedDoc({
     throw last instanceof Error ? last : new Error('capture failed')
   }
 
-  const download = async () => {
-    if (saving.current) return
-    saving.current = true
-    setSave('saving')
+  // Drops a finished PDF file into the user's downloads folder.
+  const saveBlob = (blob: Blob) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = safeName(filename)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+  }
+
+  // Preferred engine: the server renders the same document in headless Chromium
+  // and returns a REAL text PDF (selectable, searchable, OCR-ready, crisp Arabic
+  // shaping at any zoom). The local image pipeline below stays as the fallback
+  // for the rare case the server route fails.
+  const serverPdf = async (): Promise<Blob> => {
+    const res = await fetch('/api/pdf-build', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(75000),
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) throw new Error(`server pdf ${res.status}`)
+    const blob = await res.blob()
+    if (blob.size < 2048) throw new Error('server pdf empty')
+    return blob
+  }
+
+  const imagePdf = async () => {
     const t0 = Date.now()
     try {
       const [{ jsPDF }, h2c] = await Promise.all([import('jspdf'), import('html2canvas-pro')])
@@ -132,7 +161,7 @@ export default function PagedDoc({
       setSave('saved')
       report({ ok: true, mode, pages: pageCount, srcLen, outLen, ms: Date.now() - t0 })
     } catch (e) {
-      console.warn('pdf save failed:', e)
+      console.warn('pdf image pipeline failed:', e)
       setSave('failed')
       report({
         ok: false,
@@ -143,9 +172,29 @@ export default function PagedDoc({
         ms: Date.now() - t0,
         err: e instanceof Error ? e.message.slice(0, 160) : 'unknown',
       })
+    }
+  }
+
+  const tryServerDownload = async (): Promise<boolean> => {
+    if (saving.current) return false
+    saving.current = true
+    setSave('saving')
+    try {
+      saveBlob(await serverPdf())
+      setSave('saved')
+      return true
+    } catch (e) {
+      console.warn('server pdf failed:', e)
+      return false
     } finally {
       saving.current = false
     }
+  }
+
+  const download = async () => {
+    if (saving.current) return
+    if (await tryServerDownload()) return
+    await imagePdf()
   }
 
   useEffect(() => {
@@ -200,15 +249,26 @@ export default function PagedDoc({
     }
   }, [])
 
-  // The whole point of this page: click "download" in the app → the PDF file lands
-  // in the user's downloads folder by itself, no print dialog involved.
+  // The whole point of this page: open it → the PDF file lands in the user's
+  // downloads folder by itself, no print dialog involved. The server text PDF
+  // starts IMMEDIATELY (it does not need the preview); only if it fails does the
+  // local image pipeline wait for the preview to finish and take over.
   useEffect(() => {
-    if (state === 'working' || autoTried.current) return
+    if (autoTried.current) return
     autoTried.current = true
-    const id = setTimeout(() => void download(), 700)
+    const id = setTimeout(async () => {
+      const saved = await tryServerDownload()
+      if (!saved) setEngine('images')
+    }, 300)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+  }, [])
+
+  useEffect(() => {
+    if (engine !== 'images' || state === 'working' || saving.current) return
+    void imagePdf()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, state])
 
   const busy = state === 'working' || save === 'saving'
   return (

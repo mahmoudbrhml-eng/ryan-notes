@@ -7,6 +7,7 @@ import Icon, { type IconName } from '@/components/Icon'
 import Markdown, { tocOf } from '@/components/Markdown'
 import PanelSwipe from '@/components/PanelSwipe'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
+import ReadControls from '@/components/ReadControls'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
 import { SelectionProvider } from '@/components/Selection'
 import StudioPanel, { type StudioFile, type Tab } from '@/components/StudioPanel'
@@ -174,23 +175,26 @@ export default async function SubjectPage({
                 <span dir="auto" className="muted font-normal"> · {outName}</span>
               )}
             </h2>
-            {tab === 'transcript' && transcript && (
-              <ExportButtons text={transcript} filename={`${outName}.md`} pdfHref={pdfHref('transcript')} labels={exportLabels} />
-            )}
-            {tab === 'summary' && summary && (
-              <ExportButtons text={summary} filename={`${outName}-summary.md`} pdfHref={pdfHref('summary')} labels={exportLabels} />
-            )}
-            {tab === 'combo' && combo?.content && (
-              <ExportButtons
-                text={combo.content as string}
-                filename={`${String(combo.title).slice(0, 60)}.md`}
-                pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
-                labels={exportLabels}
-              />
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {tab !== 'chat' && tab !== 'overview' && <ReadControls labels={t.read} />}
+              {tab === 'transcript' && transcript && (
+                <ExportButtons text={transcript} filename={`${outName}.md`} pdfHref={pdfHref('transcript')} labels={exportLabels} />
+              )}
+              {tab === 'summary' && summary && (
+                <ExportButtons text={summary} filename={`${outName}-summary.md`} pdfHref={pdfHref('summary')} labels={exportLabels} />
+              )}
+              {tab === 'combo' && combo?.content && (
+                <ExportButtons
+                  text={combo.content as string}
+                  filename={`${String(combo.title).slice(0, 60)}.md`}
+                  pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
+                  labels={exportLabels}
+                />
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 px-5 py-5">
+          <div className="read-md flex-1 px-5 py-5">
             {tab === 'overview' &&
               (active ? (
                 <div className="flex flex-col gap-6">

@@ -147,6 +147,12 @@ export default async function PrintPage({
         filename={`${title}.pdf`}
         docKind={kind}
         rtl={rtl}
+        payload={{
+          subjectId: id,
+          kind,
+          fileId: kind === 'merged' ? undefined : sp.f,
+          mergedId: kind === 'merged' ? sp.m : undefined,
+        }}
         labels={{
           print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back,
           building: t.pdf.building, again: t.pdf.again, save: t.pdf.save, saved: t.pdf.saved,

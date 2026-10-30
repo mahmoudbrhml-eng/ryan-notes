@@ -112,12 +112,15 @@ export const en = {
   },
   pdf: {
     cover: 'Lecture notes', subject: 'Subject', date: 'Date', contents: 'Contents',
-    print: 'Download PDF', hint: 'The PDF file downloads automatically when it is ready — no print dialog.',
+    print: 'Download PDF', hint: 'A real text PDF (selectable & searchable) downloads automatically when it is ready — no print dialog.',
     again: 'Download again', save: 'Print (paper)', saved: 'PDF downloaded ✓',
-    back: 'Back', pdf: 'PDF', building: 'Building your PDF…',
+    back: 'Back', pdf: 'PDF', building: 'Building your text PDF…',
     upgrading: 'Upgrading the old summary to the full version…',
     upgradeHint: 'One time only: the stored summary was too brief, so the AI is rewriting it as a complete revision booklet (2–5 minutes). Keep this page open — the full PDF downloads by itself when it is done.',
     upgradeFail: 'Could not upgrade right now — the current version is shown instead. Try again later.',
+  },
+  read: {
+    size: 'Text size', spacing: 'Line spacing', reset: 'Reset reading view',
   },
   login: {
     tagline: 'Study smarter, one lecture at a time.',
@@ -260,12 +263,15 @@ export const ar: Dict = {
   },
   pdf: {
     cover: 'ملاحظات المحاضرة', subject: 'المادة', date: 'التاريخ', contents: 'المحتويات',
-    print: 'تنزيل PDF', hint: 'ملف الـPDF هينزل عندك أوتوماتيك أول ما يجهز — من غير نافذة طباعة.',
+    print: 'تنزيل PDF', hint: 'بننزّلك PDF نص حقيقي (تقدر تحدد وتدوّر فيه) أوتوماتيك أول ما يجهز — من غير نافذة طباعة.',
     again: 'تنزيل تاني', save: 'طباعة (ورق)', saved: 'اتنزّل الـPDF ✓',
-    back: 'رجوع', pdf: 'PDF', building: 'بنجهّز الـPDF بتاعك…',
+    back: 'رجوع', pdf: 'PDF', building: 'بنجهّز الـPDF النصي…',
     upgrading: 'بنطوّر الملخص القديم للنسخة الكاملة…',
     upgradeHint: 'مرة واحدة بس: الملخص المخزّن كان مختصر أوي، فالذكاء الاصطناعي بيكتبه من جديد ككتيّب مراجعة كامل (من ٢ لـ ٥ دقايق). سيب الصفحة مفتوحة — الـPDF الكامل هينزل لوحده أول ما يخلص.',
     upgradeFail: 'معرفناش نطوّره دلوقتي — هنعرض النسخة الموجودة بدلها. جرّب تاني بعدين.',
+  },
+  read: {
+    size: 'حجم الخط', spacing: 'تباعد الأسطر', reset: 'رجّع العرض الطبيعي',
   },
   login: {
     tagline: 'ذاكر بذكاء، محاضرة محاضرة.',
