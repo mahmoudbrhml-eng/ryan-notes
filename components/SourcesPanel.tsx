@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { compressMedia } from '@/lib/compress'
+import { compressMedia, splitPdf, compressImage, looksLikePdf, looksLikeImage } from '@/lib/compress'
 import { deleteFile } from '@/app/subjects/[id]/actions'
 import Icon, { type IconName } from './Icon'
 import Menu from './Menu'
@@ -16,16 +16,23 @@ export type SrcFile = { id: string; name: string; sub: string; icon: IconName }
 type Pending = {
   key: string
   name: string
-  state: 'tooling' | 'compressing' | 'uploading' | 'done' | 'error'
+  state: 'tooling' | 'compressing' | 'splitting' | 'uploading' | 'done' | 'error'
   error?: string
   pct?: number
 }
 
-// Inputs up to 1GB are accepted (that is the bucket's own per-file limit).
-// Audio/video above COMPRESS_ABOVE is compressed in the browser (lib/compress)
-// before upload. Compression is best-effort: if it fails on a device, the
-// original file is uploaded as-is — the bucket takes up to 1GB.
-const MAX_BYTES = 1024 * 1024 * 1024
+// Supabase caps every stored object (~50MB on the free plan) no matter what the
+// bucket config says, so nothing above ~48MB may go to storage untouched:
+// - audio/video above COMPRESS_ABOVE is compressed to a small mono MP3 in the
+//   browser first (lib/compress), which is also what keeps uploads fast;
+// - PDFs above COMPRESS_ABOVE are split into several smaller sources with no
+//   quality loss;
+// - images above COMPRESS_ABOVE are re-encoded as JPEG until they fit.
+// If the in-browser tool fails, only files that already fit are uploaded
+// as-is; anything bigger gets a clear message instead of a doomed upload.
+const MAX_MEDIA = 1024 * 1024 * 1024 // media is streamed through the compressor
+const MAX_DOC = 300 * 1024 * 1024 // PDFs are split in the browser first
+const SAFE_RAW = 48 * 1024 * 1024 // largest object uploaded untouched
 const COMPRESS_ABOVE = 45 * 1024 * 1024
 
 const isMedia = (f: File) =>
@@ -71,48 +78,104 @@ export default function SourcesPanel({
     for (let i = 0; i < list.length; i++) {
       const file = list[i]
       const key = items[i].key
-      if (file.size > MAX_BYTES) {
+      const media = isMedia(file)
+      if (file.size > (media ? MAX_MEDIA : MAX_DOC)) {
         mark(key, 'error', t.upload.tooBig)
         continue
       }
-      // Big audio/video is compressed to a small mono MP3 before it leaves the
-      // device. If the compressor fails on this device we still upload the
-      // original: the bucket accepts files up to 1GB.
-      let upFile = file
-      if (isMedia(file) && file.size > COMPRESS_ABOVE) {
+
+      // Decide what actually goes to storage: the file itself, a compressed
+      // version, or a list of PDF parts. Anything above the ~50MB storage cap
+      // must be made smaller in the browser first; media is compressed from
+      // 45MB up because that also makes uploads much faster.
+      let up: File[] = [file]
+      if (media && file.size > COMPRESS_ABOVE) {
+        let ok = false
+        for (let attempt = 0; !ok && attempt < 2; attempt++) {
+          try {
+            const r = await compressMedia(
+              file,
+              (pct) => mark(key, 'compressing', undefined, pct),
+              () => mark(key, 'tooling'),
+            )
+            up = [r.file]
+            ok = true
+          } catch {
+            /* one retry, then fall through */
+          }
+        }
+        if (!ok) {
+          if (file.size > SAFE_RAW) {
+            mark(key, 'error', t.src.compressBigFail)
+            continue
+          }
+          up = [file] // small enough to upload as-is
+        }
+      } else if (looksLikePdf(file) && file.size > SAFE_RAW) {
+        let parts: File[] | null = null
+        for (let attempt = 0; !parts && attempt < 2; attempt++) {
+          try {
+            parts = await splitPdf(
+              file,
+              () => mark(key, 'tooling'),
+              (a, b) => mark(key, 'splitting', undefined, Math.round((a / b) * 100)),
+            )
+          } catch {
+            /* one retry, then fall through */
+          }
+        }
+        if (!parts || parts.length === 0) {
+          mark(key, 'error', t.src.splitFail)
+          continue
+        }
+        up = parts
+      } else if (looksLikeImage(file) && file.size > SAFE_RAW) {
         try {
-          const r = await compressMedia(
-            file,
-            (pct) => mark(key, 'compressing', undefined, pct),
-            () => mark(key, 'tooling'),
-          )
-          if (r.file !== file) upFile = r.file
+          const small = await compressImage(file)
+          if (!small) {
+            mark(key, 'error', t.src.compressBigFail)
+            continue
+          }
+          up = [small]
         } catch {
-          upFile = file
+          mark(key, 'error', t.src.compressBigFail)
+          continue
         }
       }
-      const fileId = crypto.randomUUID()
-      const finalName = upFile === file ? file.name : `${file.name.replace(/\.[^.]+$/, '')}.mp3`
-      const safe = finalName.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
-      const path = `${userId}/${subjectId}/${fileId}-${safe}`
-      const { error: upErr } = await supabase.storage
-        .from('lecture-files')
-        .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
-      if (upErr) {
-        mark(key, 'error', upErr.message)
-        continue
+
+      let failed = false
+      for (const upFile of up) {
+        mark(key, 'uploading')
+        const fileId = crypto.randomUUID()
+        const isOriginal = upFile === file
+        const finalName = isOriginal ? file.name : upFile.name
+        const safe = finalName.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80)
+        const path = `${userId}/${subjectId}/${fileId}-${safe}`
+        const { error: upErr } = await supabase.storage
+          .from('lecture-files')
+          .upload(path, upFile, { contentType: upFile.type || undefined, upsert: false })
+        if (upErr) {
+          mark(key, 'error', friendlyStorage(upErr.message))
+          failed = true
+          break
+        }
+        const { error: dbErr } = await supabase.from('files').insert({
+          id: fileId, subject_id: subjectId, name: finalName, storage_path: path,
+          mime: upFile.type || null, size_bytes: upFile.size,
+        })
+        if (dbErr) {
+          await supabase.storage.from('lecture-files').remove([path])
+          mark(key, 'error', dbErr.message)
+          failed = true
+          break
+        }
       }
-      const { error: dbErr } = await supabase.from('files').insert({
-        id: fileId, subject_id: subjectId, name: file.name, storage_path: path,
-        mime: upFile.type || null, size_bytes: upFile.size,
-      })
-      if (dbErr) {
-        await supabase.storage.from('lecture-files').remove([path])
-        mark(key, 'error', dbErr.message)
-        continue
-      }
-      mark(key, 'done')
+      if (!failed) mark(key, 'done')
       router.refresh()
+    }
+
+    function friendlyStorage(raw: string) {
+      return /exceeded the maximum allowed size/i.test(raw) ? t.src.storageLimit : raw
     }
   }
 
@@ -222,9 +285,11 @@ export default function SourcesPanel({
                     ? `${t.src.failed}: ${p.error ?? ''}`
                     : p.state === 'compressing'
                       ? `${t.src.compressing} ${p.pct ?? 0}%`
-                      : p.state === 'tooling'
-                        ? t.src.prepTool
-                        : t.src.uploading}
+                      : p.state === 'splitting'
+                        ? `${t.src.splitting} ${p.pct ?? 0}%`
+                        : p.state === 'tooling'
+                          ? t.src.prepTool
+                          : t.src.uploading}
                 </span>
               </span>
               {p.state === 'error' && (

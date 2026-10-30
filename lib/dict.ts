@@ -43,9 +43,9 @@ export const en = {
   },
   upload: {
     drop: 'Drag files here or click to choose',
-    hint: 'PDF · DOCX · PPTX · TXT · Images · Audio (up to 1GB — big files are compressed automatically)',
+    hint: 'PDF · DOCX · PPTX · TXT · Images · Audio · Video — big files are compressed or split automatically',
     uploading: 'Uploading {i} of {n}…',
-    tooBig: 'larger than 1GB',
+    tooBig: 'larger than 1GB (audio/video) or 300MB (PDF and documents)',
   },
   ai: {
     transcribe: 'Transcribe', makeNotes: 'Make notes', notesLang: 'Notes language',
@@ -95,8 +95,11 @@ export const en = {
     textTitle: 'Title', textBody: 'Paste your text here', linkLabel: 'Link', add: 'Add', cancel: 'Cancel',
     linkHint: 'YouTube links are read by the AI directly (beta). Websites are saved as text.',
     uploading: 'Uploading…', failed: 'Failed', dismiss: 'Dismiss', adding: 'Adding…',
-    compressing: 'Compressing…', prepTool: 'Preparing the compressor (first time only)…',
-    compressFail: 'The compressor could not run on this device, so the original file will be uploaded instead (up to 1GB is accepted).',
+    compressing: 'Compressing…', prepTool: 'Preparing the compressor (first time only)…', splitting: 'Splitting into parts…',
+    compressFail: 'The compressor could not run on this device. Files that already fit (under 50MB) are uploaded as-is.',
+    compressBigFail: 'This file is bigger than the 50MB storage limit and could not be made smaller on this device. Try again in a moment, or compress it on the device first.',
+    splitFail: 'This PDF is too big to split automatically (a single page may exceed the limit). Export it at a lower quality and upload it again.',
+    storageLimit: 'The file is bigger than the 50MB storage limit — it should have been compressed or split first. Please try again.',
     select: 'Select', selected: '{n} selected', done: 'Done',
   },
   errors: {
@@ -194,9 +197,9 @@ export const ar: Dict = {
   },
   upload: {
     drop: 'اسحب الملفات هنا أو اضغط للاختيار',
-    hint: 'PDF · DOCX · PPTX · TXT · صور · صوت (لحد 1 جيجا — الملفات الكبيرة بتتضغط أوتوماتيك)',
+    hint: 'PDF · DOCX · PPTX · TXT · صور · صوت وفيديو — الملفات الكبيرة بتتضغط أو تتقسم تلقائي',
     uploading: 'جارٍ رفع {i} من {n}…',
-    tooBig: 'أكبر من 1 جيجا',
+    tooBig: 'أكبر من 1 جيجا (صوت/فيديو) أو 300 ميجا (PDF والمستندات)',
   },
   ai: {
     transcribe: 'تفريغ', makeNotes: 'اعمل ملاحظات', notesLang: 'لغة الملاحظات',
@@ -246,8 +249,11 @@ export const ar: Dict = {
     textTitle: 'العنوان', textBody: 'الصق النص هنا', linkLabel: 'الرابط', add: 'إضافة', cancel: 'إلغاء',
     linkHint: 'روابط يوتيوب بيقراها الذكاء الاصطناعي مباشرة (تجريبي). المواقع بتتحفظ كنص.',
     uploading: 'جارٍ الرفع…', failed: 'فشل', dismiss: 'إخفاء', adding: 'جارٍ الإضافة…',
-    compressing: 'جارٍ الضغط…', prepTool: 'بنجهّز أداة الضغط (أول مرة بس)…',
-    compressFail: 'معرفناش نشغّل أداة الضغط على جهازك، فه هنرفع الملف الأصلي زي ما هو (الحد الأقصى للملف 1 جيجا).',
+    compressing: 'جارٍ الضغط…', prepTool: 'بنجهّز أداة الضغط (أول مرة بس)…', splitting: 'بنقسّم الملف لأجزاء…',
+    compressFail: 'معرفناش نشغّل أداة الضغط على جهازك. الملفات اللي أصلاً أقل من 50 ميجا بتترفع زي ما هي.',
+    compressBigFail: 'الملف أكبر من حد التخزين (50 ميجا) ومقدرناش نصغّره على جهازك. جرّب تاني بعد شوية، أو اضغّطه الأول على جهازك.',
+    splitFail: 'الـ PDF كبير جدًا على التقسيم التلقائي (ممكن صفحة واحدة بتعدي الحد). صدّره بجودة أقل وارفعه تاني.',
+    storageLimit: 'الملف أكبر من حد التخزين (50 ميجا) — المفروض يتضغط أو يتقسم الأول. جرّب تاني لو سمحت.',
     select: 'تحديد', selected: 'تم تحديد {n}', done: 'تم',
   },
   errors: {

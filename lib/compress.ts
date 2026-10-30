@@ -205,3 +205,78 @@ export async function compressMedia(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Big PDFs: the storage plan caps every stored object (~50MB), so a large PDF
+// is split IN THE BROWSER into several smaller PDFs, each uploaded as its own
+// source. Pages are copied verbatim — nothing is re-encoded, no quality is
+// lost, and each part still has its text layer. pdf-lib is imported lazily so
+// the ~1MB library is only downloaded when a big PDF is actually dropped.
+const PDF_TARGET = 40 * 1024 * 1024 // aim well under the 50MB storage cap
+const PDF_HARD = 46 * 1024 * 1024 // a single part above this is not usable
+const SPLIT_MAX = 300 * 1024 * 1024 // bigger inputs can exhaust phone memory
+
+export const looksLikePdf = (f: File) =>
+  f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+
+export const looksLikeImage = (f: File) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i.test(f.name)
+
+export async function splitPdf(
+  input: File,
+  onStage: () => void,
+  onProgress: (part: number, total: number) => void,
+): Promise<File[]> {
+  if (input.size > SPLIT_MAX) throw new Error('pdf-too-large-to-split')
+  onStage()
+  const { PDFDocument } = await import('pdf-lib')
+  const src = await PDFDocument.load(await input.arrayBuffer(), { ignoreEncryption: true })
+  const pages = src.getPageCount()
+  if (pages < 2) throw new Error('page-too-big') // one huge page cannot be split further
+  const base = input.name.replace(/\.pdf$/i, '')
+  let n = Math.max(2, Math.ceil(input.size / PDF_TARGET))
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const per = Math.ceil(pages / n)
+    const ranges: { start: number; count: number }[] = []
+    for (let s = 0; s < pages; s += per) ranges.push({ start: s, count: Math.min(per, pages - s) })
+    const out: File[] = []
+    let retry = false
+    for (let i = 0; i < ranges.length; i++) {
+      onProgress(i + 1, ranges.length)
+      const doc = await PDFDocument.create()
+      const copied = await doc.copyPages(src, Array.from({ length: ranges[i].count }, (_, k) => ranges[i].start + k))
+      for (const p of copied) doc.addPage(p)
+      const bytes = await doc.save({ useObjectStreams: true })
+      if (bytes.byteLength > PDF_HARD) {
+        if (ranges[i].count === 1) throw new Error('page-too-big')
+        retry = true
+        break
+      }
+      const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+      out.push(new File([buf], `${base} (${i + 1}-${ranges.length}).pdf`, { type: 'application/pdf' }))
+    }
+    if (!retry) return out
+    n = Math.ceil(n * 1.6) + 1 // uneven page weights: try with more, smaller parts
+  }
+  throw new Error('split-failed')
+}
+
+// ---------------------------------------------------------------------------
+// Big images: re-encode as JPEG (long edge capped at 4096px, plenty for slides
+// and scans) stepping quality down until the result fits the storage cap.
+export async function compressImage(input: File): Promise<File | null> {
+  const bmp = await createImageBitmap(input)
+  const scale = Math.min(1, 4096 / Math.max(bmp.width, bmp.height))
+  const w = Math.max(1, Math.round(bmp.width * scale))
+  const h = Math.max(1, Math.round(bmp.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h)
+  bmp.close()
+  const name = `${input.name.replace(/\.[^.]+$/, '')}.jpg`
+  for (const q of [0.82, 0.6, 0.42, 0.28, 0.18]) {
+    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, 'image/jpeg', q))
+    if (blob && blob.size <= PDF_HARD) return new File([blob], name, { type: 'image/jpeg' })
+  }
+  return null
+}
