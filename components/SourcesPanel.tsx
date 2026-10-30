@@ -35,7 +35,6 @@ export default function SourcesPanel({
 }) {
   const router = useRouter()
   const sel = useSelection()
-  const press = useRef<{ t: ReturnType<typeof setTimeout> | null; fired: boolean }>({ t: null, fired: false })
   const picker = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
   const [modal, setModal] = useState<null | 'text' | 'link'>(null)
@@ -124,7 +123,10 @@ export default function SourcesPanel({
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-semibold">{t.ws.sources}</h2>
+        <h2 className="font-semibold">
+          {t.ws.sources}
+          {files.length > 0 && <span className="muted ms-2 text-sm font-normal">{files.length}</span>}
+        </h2>
         <Menu
           label={t.ws.add}
           trigger={<><Icon name="plus" className="h-4 w-4" />{t.ws.add}</>}
@@ -201,39 +203,31 @@ export default function SourcesPanel({
         {files.map((f) => {
           const checked = sel.selected.includes(f.id)
           return (
-            <li key={f.id} className="source" data-active={sel.mode ? checked : f.id === activeId}>
+            <li key={f.id} className="source" data-active={checked || f.id === activeId}>
               <div className="flex items-center gap-2">
+                {/* Small always-visible tick box on the near edge: tap it to pick
+                    this source for a batch job — tapping nothing is fine too. */}
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={t.src.select}
+                  onClick={() => sel.toggle(f.id)}
+                  className="grid !h-8 !w-8 shrink-0 place-items-center rounded-lg hover:bg-surface2"
+                >
+                  <span
+                    className={`grid h-[18px] w-[18px] place-items-center rounded-md border transition-colors ${
+                      checked ? 'border-brand bg-brand text-brand-fg' : 'border-line bg-surface'
+                    }`}
+                  >
+                    {checked && <Icon name="check" className="h-3 w-3" />}
+                  </span>
+                </button>
                 <Link
                   scroll={false}
                   href={`/subjects/${subjectId}?f=${f.id}&tab=overview&p=notes`}
                   className="flex min-w-0 flex-1 items-center gap-3 select-none"
-                  style={{ WebkitTouchCallout: 'none' }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onPointerDown={() => {
-                    press.current.fired = false
-                    press.current.t = setTimeout(() => {
-                      press.current.fired = true
-                      sel.start(f.id)
-                    }, 450)
-                  }}
-                  onPointerUp={() => press.current.t && clearTimeout(press.current.t)}
-                  onPointerLeave={() => press.current.t && clearTimeout(press.current.t)}
-                  onPointerCancel={() => press.current.t && clearTimeout(press.current.t)}
-                  onClick={(e) => {
-                    if (press.current.fired) {
-                      e.preventDefault()
-                      press.current.fired = false
-                    } else if (sel.mode) {
-                      e.preventDefault()
-                      sel.toggle(f.id)
-                    }
-                  }}
                 >
-                  {sel.mode && (
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${checked ? 'border-brand bg-brand text-brand-fg' : 'border-line'}`}>
-                      {checked && <Icon name="check" className="h-3.5 w-3.5" />}
-                    </span>
-                  )}
                   <span className="tile !h-10 !w-10 bg-surface2 text-navy"><Icon name={f.icon} className="h-4 w-4" /></span>
                   <span className="min-w-0">
                     <span dir="auto" className="block truncate text-sm font-semibold">{f.name}</span>
@@ -246,19 +240,14 @@ export default function SourcesPanel({
                   className="btn btn-icon !h-8 !w-8 hover:bg-surface2"
                 >
                   {(close) => (
-                    <>
-                      <button type="button" className="menu-item" onClick={() => { close(); sel.start(f.id) }}>
-                        <Icon name="check" className="h-4 w-4" />{t.src.select}
-                      </button>
-                      <form action={deleteFile}>
-                        <input type="hidden" name="id" value={f.id} />
-                        <input type="hidden" name="subjectId" value={subjectId} />
-                        <ConfirmButton message={t.ws.confirmDelFile.replace('{name}', f.name)} className="menu-item danger">
-                          <Icon name="trash" className="h-4 w-4" />
-                          {t.ws.delFile}
-                        </ConfirmButton>
-                      </form>
-                    </>
+                    <form action={deleteFile}>
+                      <input type="hidden" name="id" value={f.id} />
+                      <input type="hidden" name="subjectId" value={subjectId} />
+                      <ConfirmButton message={t.ws.confirmDelFile.replace('{name}', f.name)} className="menu-item danger">
+                        <Icon name="trash" className="h-4 w-4" />
+                        {t.ws.delFile}
+                      </ConfirmButton>
+                    </form>
                   )}
                 </Menu>
               </div>

@@ -14,19 +14,14 @@ const C = createContext<Ctx>({ selected: [], mode: false, toggle: () => {}, star
 
 export function SelectionProvider({ children }: { children: ReactNode }) {
   const [selected, setSelected] = useState<string[]>([])
-  const [mode, setMode] = useState(false)
+  // "Mode" is just "something is ticked" now: the small checkbox on every row
+  // selects directly, so there is no separate selection state to enter or leave.
   const value: Ctx = {
     selected,
-    mode,
+    mode: selected.length > 0,
     toggle: (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])),
-    start: (id) => {
-      setMode(true)
-      setSelected((s) => (s.includes(id) ? s : [...s, id]))
-    },
-    clear: () => {
-      setSelected([])
-      setMode(false)
-    },
+    start: (id) => setSelected((s) => (s.includes(id) ? s : [...s, id])),
+    clear: () => setSelected([]),
   }
   return <C.Provider value={value}>{children}</C.Provider>
 }
