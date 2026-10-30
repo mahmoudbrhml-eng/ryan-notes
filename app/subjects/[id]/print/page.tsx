@@ -132,7 +132,11 @@ export default async function PrintPage({
   })
 
   return (
-    <div className="doc min-h-screen bg-surface2" dir={rtl ? 'rtl' : 'ltr'}>
+    // dir must stay LTR on this wrapper: a RTL ancestor around Paged.js's render
+    // container silently collapses pagination into one overflowing page per
+    // section (verified: 3 pages vs 23). RTL text is handled inside by the
+    // markdown container and the auto-direction of the cover title.
+    <div className="doc min-h-screen bg-surface2" dir="ltr">
       <AutoUpgrade
         enabled={!!upgradeFileId}
         fileId={upgradeFileId}
@@ -142,6 +146,7 @@ export default async function PrintPage({
         backHref={kind === 'merged' ? `/subjects/${id}?tab=combo&m=${sp.m}` : `/subjects/${id}?f=${sp.f}&tab=${kind}`}
         filename={`${title}.pdf`}
         docKind={kind}
+        rtl={rtl}
         labels={{
           print: t.pdf.print, hint: t.pdf.hint, back: t.pdf.back,
           building: t.pdf.building, again: t.pdf.again, save: t.pdf.save, saved: t.pdf.saved,

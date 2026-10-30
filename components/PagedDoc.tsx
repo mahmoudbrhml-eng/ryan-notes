@@ -29,12 +29,14 @@ export default function PagedDoc({
   backHref,
   filename,
   docKind,
+  rtl,
   labels,
   children,
 }: {
   backHref: string
   filename: string
   docKind?: string
+  rtl?: boolean
   labels: { print: string; hint: string; back: string; building: string; again: string; save: string; saved: string }
   children: ReactNode
 }) {
@@ -211,7 +213,9 @@ export default function PagedDoc({
   const busy = state === 'working' || save === 'saving'
   return (
     <>
-      <div className="no-print sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 text-fg">
+      {/* The page wrapper is forced LTR for the pagination engine; the toolbar
+          carries the UI direction itself. */}
+      <div dir={rtl ? 'rtl' : 'ltr'} className="no-print sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 text-fg">
         <Link href={backHref} className="btn btn-ghost btn-sm">{labels.back}</Link>
         <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void download()}>
           {busy && <span className="spinner" />}

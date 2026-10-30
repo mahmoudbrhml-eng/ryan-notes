@@ -53,7 +53,7 @@ export default function AutoUpgrade({
   if (phase === 'fail')
     return (
       <>
-        <div className="no-print border-b border-line bg-surface px-4 py-2 text-center text-sm text-fg">{labels.fail}</div>
+        <div dir="auto" className="no-print border-b border-line bg-surface px-4 py-2 text-center text-sm text-fg">{labels.fail}</div>
         {children}
       </>
     )
@@ -66,8 +66,8 @@ export default function AutoUpgrade({
     <div className="flex min-h-[70vh] flex-col items-center justify-center gap-5 px-6 text-center">
       <span className="spinner" />
       <div className="max-w-md space-y-3">
-        <h2 className="text-lg font-semibold text-fg">{labels.upgrading}</h2>
-        <p className="muted text-sm leading-relaxed">{labels.hint}</p>
+        <h2 dir="auto" className="text-lg font-semibold text-fg">{labels.upgrading}</h2>
+        <p dir="auto" className="muted text-sm leading-relaxed">{labels.hint}</p>
         <p className="font-mono text-2xl font-bold text-fg tabular-nums" aria-live="polite">
           {mm}:{ss}
         </p>

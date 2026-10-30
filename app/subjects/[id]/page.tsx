@@ -293,7 +293,7 @@ export default async function SubjectPage({
 
             {(tab === 'quiz' || tab === 'flash') &&
               (questions.length > 0 ? (
-                <QuizRunner key={`${activeId}-${tab}-${questions.length}`} questions={questions} mode={tab} t={t.quiz} />
+                <QuizRunner key={`${activeId}-${tab}-${questions.length}`} questions={questions} mode={tab} t={t.quiz} rtl={lang !== 'en'} />
               ) : (
                 <p className="muted py-10 text-center">{t.quiz.empty}</p>
               ))}

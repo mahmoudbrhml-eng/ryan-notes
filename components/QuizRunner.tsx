@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Dict } from '@/lib/dict'
 
 export type Q = { q: string; o: string[]; a: number; ex: string }
@@ -9,30 +9,115 @@ export default function QuizRunner({
   questions,
   mode,
   t,
+  rtl,
 }: {
   questions: Q[]
   mode: 'quiz' | 'flash'
   t: Dict['quiz']
+  rtl?: boolean
 }) {
-  return mode === 'quiz' ? <Quiz questions={questions} t={t} /> : <Flash questions={questions} t={t} />
+  return mode === 'quiz' ? <Quiz questions={questions} t={t} rtl={rtl} /> : <Flash questions={questions} t={t} rtl={rtl} />
 }
 
-function Quiz({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
+// Shared navigation: horizontal swipe on the card area (mirrored for RTL —
+// never hijacks vertical scrolling) plus keyboard arrows/digits. onNext returns
+// false when advancing is not allowed, so keys and swipes stay honest.
+function useNav({
+  onPrev,
+  onNext,
+  onDigit,
+  digitCount,
+  rtl,
+}: {
+  onPrev: () => void
+  onNext: () => boolean
+  onDigit?: (i: number) => void
+  digitCount?: number
+  rtl?: boolean
+}) {
+  const touch = useRef<{ x: number; y: number } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => {
+    const tt = e.touches[0]
+    touch.current = { x: tt.clientX, y: tt.clientY }
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const st = touch.current
+    touch.current = null
+    if (!st) return
+    const tt = e.changedTouches[0]
+    const dx = tt.clientX - st.x
+    const dy = tt.clientY - st.y
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return // that was a scroll
+    const forward = rtl ? dx > 0 : dx < 0
+    if (forward) onNext()
+    else onPrev()
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON' || el.isContentEditable)) return
+      const fwd = rtl ? 'ArrowLeft' : 'ArrowRight'
+      const back = rtl ? 'ArrowRight' : 'ArrowLeft'
+      if (e.key === fwd || e.key === 'ArrowDown' || e.key === 'Enter') {
+        if (onNext()) e.preventDefault()
+      } else if (e.key === back || e.key === 'ArrowUp') {
+        onPrev()
+        e.preventDefault()
+      } else if (onDigit && digitCount && /^[1-9]$/.test(e.key)) {
+        const i = Number(e.key) - 1
+        if (i < digitCount) {
+          onDigit(i)
+          e.preventDefault()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  return { onTouchStart, onTouchEnd }
+}
+
+function Quiz({ questions, t, rtl }: { questions: Q[]; t: Dict['quiz']; rtl?: boolean }) {
   const [order, setOrder] = useState<number[]>(() => questions.map((_, i) => i))
   const [pos, setPos] = useState(0)
-  const [picked, setPicked] = useState<number | null>(null)
-  const [wrong, setWrong] = useState<number[]>([])
-  const [score, setScore] = useState(0)
+  // One pick per POSITION (not per question) so going back shows the exact
+  // state the question was answered in, and Next walks forward through it.
+  const [picks, setPicks] = useState<(number | null)[]>(() => questions.map(() => null))
   const [done, setDone] = useState(false)
+  const topRef = useRef<HTMLDivElement>(null)
+
+  const picked = picks[pos]
+  const q = questions[order[pos]]
+  const score = order.reduce((s, qi, p) => s + (picks[p] !== null && picks[p] === questions[qi].a ? 1 : 0), 0)
+  const answered = picks.filter((x) => x !== null).length
+  const wrong = order.filter((_, p) => picks[p] !== null && picks[p] !== questions[order[p]].a)
 
   function restart(list: number[]) {
     setOrder(list)
     setPos(0)
-    setPicked(null)
-    setWrong([])
-    setScore(0)
+    setPicks(list.map(() => null))
     setDone(false)
   }
+
+  const pick = (i: number) => {
+    if (picks[pos] !== null) return
+    setPicks((w) => w.map((x, p) => (p === pos ? i : x)))
+  }
+  const next = () => {
+    if (picked === null) return false
+    if (pos + 1 >= order.length) setDone(true)
+    else setPos(pos + 1)
+    return true
+  }
+  const prev = () => setPos((p) => Math.max(0, p - 1))
+
+  // Long answers push the buttons below the fold on phones: always bring the
+  // question back into view when moving between questions.
+  useEffect(() => {
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [pos])
+
+  const nav = useNav({ onPrev: prev, onNext: next, onDigit: pick, digitCount: q.o.length, rtl })
 
   if (done) {
     const pct = Math.round((score / order.length) * 100)
@@ -56,15 +141,14 @@ function Quiz({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
     )
   }
 
-  const q = questions[order[pos]]
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
-      <div>
+    <div className="mx-auto flex max-w-2xl flex-col gap-4" {...nav}>
+      <div ref={topRef} className="scroll-mt-24">
         <div className="muted mb-2 flex justify-between text-sm">
           <span>{t.qOf.replace('{i}', String(pos + 1)).replace('{n}', String(order.length))}</span>
-          <span dir="ltr">{score}/{pos + (picked !== null ? 1 : 0)}</span>
+          <span dir="ltr">{score}/{answered}</span>
         </div>
-        <div className="bar"><i style={{ width: `${((pos + (picked !== null ? 1 : 0)) / order.length) * 100}%` }} /></div>
+        <div className="bar"><i style={{ width: `${(answered / order.length) * 100}%` }} /></div>
       </div>
 
       <h3 dir="auto" className="text-lg font-semibold leading-8">{q.q}</h3>
@@ -78,11 +162,7 @@ function Quiz({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
               key={i}
               type="button"
               disabled={picked !== null}
-              onClick={() => {
-                setPicked(i)
-                if (i === q.a) setScore((s) => s + 1)
-                else setWrong((w) => [...w, order[pos]])
-              }}
+              onClick={() => pick(i)}
               className={`flex items-start gap-3 rounded-2xl border border-line p-3.5 text-start transition hover:bg-surface2 ${state}`}
             >
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface2 text-xs font-bold">
@@ -103,14 +183,9 @@ function Quiz({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button type="button" className="btn btn-primary" disabled={picked === null} onClick={() => {
-          if (pos + 1 >= order.length) setDone(true)
-          else {
-            setPos(pos + 1)
-            setPicked(null)
-          }
-        }}>
+      <div className="flex justify-between">
+        <button type="button" className="btn btn-ghost" disabled={pos === 0} onClick={prev}>{t.prev}</button>
+        <button type="button" className="btn btn-primary" disabled={picked === null} onClick={() => void next()}>
           {pos + 1 >= order.length ? t.finish : t.next}
         </button>
       </div>
@@ -118,7 +193,7 @@ function Quiz({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
   )
 }
 
-function Flash({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
+function Flash({ questions, t, rtl }: { questions: Q[]; t: Dict['quiz']; rtl?: boolean }) {
   const [pos, setPos] = useState(0)
   const [flip, setFlip] = useState(false)
   const q = questions[pos]
@@ -126,8 +201,22 @@ function Flash({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
     setPos(n)
     setFlip(false)
   }
+  const next = () => {
+    if (pos + 1 >= questions.length) return false
+    go(pos + 1)
+    return true
+  }
+  const prev = () => {
+    if (pos > 0) go(pos - 1)
+  }
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [pos])
+
+  const nav = useNav({ onPrev: prev, onNext: next, rtl })
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4">
+    <div className="mx-auto flex max-w-xl flex-col gap-4" {...nav}>
       <p className="muted text-center text-sm">
         {t.qOf.replace('{i}', String(pos + 1)).replace('{n}', String(questions.length))} · {t.flip}
       </p>
@@ -148,8 +237,8 @@ function Flash({ questions, t }: { questions: Q[]; t: Dict['quiz'] }) {
         )}
       </button>
       <div className="flex justify-between">
-        <button type="button" className="btn btn-ghost" disabled={pos === 0} onClick={() => go(pos - 1)}>{t.prev}</button>
-        <button type="button" className="btn btn-primary" disabled={pos + 1 >= questions.length} onClick={() => go(pos + 1)}>
+        <button type="button" className="btn btn-ghost" disabled={pos === 0} onClick={prev}>{t.prev}</button>
+        <button type="button" className="btn btn-primary" disabled={pos + 1 >= questions.length} onClick={next}>
           {t.next}
         </button>
       </div>
