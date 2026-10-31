@@ -11,7 +11,7 @@ export default async function ToolsPage() {
 
   const { t } = await getI18n()
   return (
-    <AppShell title={t.pdft.title}>
+    <AppShell title={t.pdft.title} back={{ href: '/subjects', label: t.ws.back }}>
       <main className="px-4 pb-14 pt-5 md:px-6">
         <PdfTools t={t.pdft} />
       </main>
