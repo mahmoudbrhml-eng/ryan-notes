@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
 import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
+import { parseQuiz, type Q } from '@/lib/quizparse'
 import { sampleText } from '@/lib/clean'
 import { tracker } from '@/lib/usage'
 import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
@@ -11,31 +12,6 @@ export const maxDuration = 300
 const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
-
-type Q = { q: string; o: string[]; a: number; ex: string }
-
-function parseQuiz(raw: string): Q[] {
-  const clean = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-  const start = clean.indexOf('[')
-  const end = clean.lastIndexOf(']')
-  if (start < 0 || end < 0) return []
-  let arr: unknown
-  try {
-    arr = JSON.parse(clean.slice(start, end + 1))
-  } catch {
-    return []
-  }
-  if (!Array.isArray(arr)) return []
-  const out: Q[] = []
-  for (const x of arr as Record<string, unknown>[]) {
-    const o = Array.isArray(x.o) ? x.o.map((s) => String(s)) : []
-    const a = Number(x.a)
-    if (typeof x.q === 'string' && o.length === 4 && Number.isInteger(a) && a >= 0 && a <= 3) {
-      out.push({ q: x.q, o, a, ex: typeof x.ex === 'string' ? x.ex : '' })
-    }
-  }
-  return out
-}
 
 export async function POST(req: Request) {
   try {

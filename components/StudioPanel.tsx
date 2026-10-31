@@ -25,7 +25,7 @@ export type StudioFile = {
   summary: boolean
   quiz: boolean
 }
-export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'combo'
+export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'radar' | 'combo'
 type NLang = 'ar' | 'en' | 'fa' | 'custom'
 type JobKind = 'notes' | 'summary' | 'quiz'
 
@@ -98,6 +98,7 @@ export default function StudioPanel({
     { key: 'focus', icon: 'star', label: t.tools.focus, to: href('focus'), current: tab === 'focus' },
     { key: 'quiz', icon: 'quiz', label: t.tools.quiz, to: href('quiz'), current: tab === 'quiz' },
     { key: 'flash', icon: 'flash', label: t.tools.flash, to: href('flash'), current: tab === 'flash' },
+    { key: 'radar', icon: 'radar', label: t.tools.radar, to: href('radar'), current: tab === 'radar' },
   ]
   const langOpts = [
     { v: 'ar' as NLang, l: t.ai.langAr },

@@ -48,7 +48,7 @@ export const en = {
   },
   tools: {
     transcript: 'Transcript', summary: 'Summary', focus: 'Doctor’s focus', quiz: 'Quiz',
-    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan', chat: 'Ryan AI', merged: 'Combined notes',
+    flash: 'Flashcards', mind: 'Mind map', viva: 'Viva practice', plan: 'Study plan', chat: 'Ryan AI', merged: 'Combined notes', radar: 'Weakness radar',
   },
   upload: {
     drop: 'Drag files here or click to choose',
@@ -94,6 +94,19 @@ export const en = {
     retryWrong: 'Retry wrong answers', restart: 'Start over', correct: 'Correct', wrong: 'Not quite',
     qOf: 'Question {i} of {n}', flip: 'Tap the card to flip', answer: 'Answer',
     empty: 'No quiz yet. Generate one from the Studio.',
+  },
+  radar: {
+    title: 'Weakness radar',
+    overall: 'Overall accuracy', attempts: '{n} answers', recent: 'Last 7 days',
+    up: 'Improving ↑', down: 'Needs work ↓', flat: 'Steady',
+    bySource: 'Accuracy by source', weakQ: 'Questions that keep tripping you',
+    seen: 'missed {w} of {n}', noWeak: 'No weak questions yet — keep it up!',
+    practice: 'Train my weak spots', practicing: 'Building your training quiz…',
+    practiceInfo: 'A fresh quiz targeting the exact questions you got wrong, mixed with related material.',
+    back: 'Back to radar', retry: 'Try again',
+    noData: 'Answer a quiz first, and your radar appears here.',
+    noDataHint: 'Open any source → Quiz → finish it. The radar starts tracking automatically — every answer makes it smarter.',
+    err: 'Could not load the radar.',
   },
   chat: {
     placeholder: 'Ask about your lectures…', send: 'Send', thinking: 'Thinking…', clear: 'Clear', mode: 'Mode',
@@ -331,7 +344,7 @@ export const ar: Dict = {
   },
   tools: {
     transcript: 'التفريغ', summary: 'الملخص', focus: 'تركيز الدكتور', quiz: 'اختبار',
-    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة', chat: 'ريان AI', merged: 'ملاحظات مجمّعة',
+    flash: 'بطاقات تعليمية', mind: 'خريطة ذهنية', viva: 'تدريب الشفوي', plan: 'خطة مذاكرة', chat: 'ريان AI', merged: 'ملاحظات مجمّعة', radar: 'رادار الضعف',
   },
   upload: {
     drop: 'اسحب الملفات هنا أو اضغط للاختيار',
@@ -377,6 +390,19 @@ export const ar: Dict = {
     retryWrong: 'أعد الأسئلة الغلط', restart: 'ابدأ من الأول', correct: 'صح', wrong: 'مش بالظبط',
     qOf: 'سؤال {i} من {n}', flip: 'اضغط على البطاقة لقلبها', answer: 'الإجابة',
     empty: 'لسه مفيش اختبار. اعمل واحد من الاستوديو.',
+  },
+  radar: {
+    title: 'رادار الضعف',
+    overall: 'دقة إجاباتك', attempts: '{n} إجابة', recent: 'آخر ٧ أيام',
+    up: 'بيتحسّن ↑', down: 'محتاج شغل ↓', flat: 'ثابت',
+    bySource: 'الدقة حسب المصدر', weakQ: 'أسئلة لسه بتتعثر فيها',
+    seen: 'غلط في {w} من {n}', noWeak: 'مفيش أسئلة بتتعثر فيها لحد دلوقتي — استمر!',
+    practice: 'دربني على نقاط ضعفي', practicing: 'بنجهّز اختبار التدريب…',
+    practiceInfo: 'اختبار جديد على نفس النقط اللي غلطت فيها بالظبط، مخلوط بشغل من نفس المحاضرات.',
+    back: 'رجوع للرادار', retry: 'حاول تاني',
+    noData: 'جاوب على اختبار الأول، والرادار هيظهر هنا.',
+    noDataHint: 'افتح أي مصدر ← اختبار ← كمّله. الرادار بيتابع لوحده — كل إجابة بتخليه أدق.',
+    err: 'الرادار مش قادر يحمل دلوقتي.',
   },
   chat: {
     placeholder: 'اسأل من محاضراتك…', send: 'إرسال', thinking: 'جارٍ التفكير…', clear: 'مسح', mode: 'الوضع',

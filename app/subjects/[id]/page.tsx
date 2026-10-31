@@ -8,6 +8,7 @@ import Markdown, { tocOf } from '@/components/Markdown'
 import PanelSwipe from '@/components/PanelSwipe'
 import QuickAdd from '@/components/QuickAdd'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
+import Radar from '@/components/Radar'
 import ReadControls from '@/components/ReadControls'
 import ShareButton from '@/components/ShareButton'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
@@ -20,7 +21,7 @@ import { kindOf } from '@/lib/filekind'
 import { extractFocus } from '@/lib/focus'
 import { createClient } from '@/lib/supabase/server'
 
-const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash', 'combo']
+const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash', 'radar', 'combo']
 type Panel = 'sources' | 'notes' | 'studio'
 
 const hostOf = (u: string) => {
@@ -252,10 +253,19 @@ export default async function SubjectPage({
 
             {(tab === 'quiz' || tab === 'flash') &&
               (questions.length > 0 ? (
-                <QuizRunner key={`${activeId}-${tab}-${questions.length}`} questions={questions} mode={tab} t={t.quiz} rtl={lang !== 'en'} />
+                <QuizRunner
+                  key={`${activeId}-${tab}-${questions.length}`}
+                  questions={questions}
+                  mode={tab}
+                  t={t.quiz}
+                  rtl={lang !== 'en'}
+                  track={tab === 'quiz' && activeId ? { subjectId: subject.id, fileId: activeId } : undefined}
+                />
               ) : (
                 <p className="muted py-10 text-center">{t.quiz.empty}</p>
               ))}
+
+            {tab === 'radar' && <Radar subjectId={subject.id} t={t.radar} quizT={t.quiz} rtl={lang !== 'en'} />}
     </>
   )
 

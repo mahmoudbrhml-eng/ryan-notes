@@ -5,18 +5,23 @@ import type { Dict } from '@/lib/dict'
 
 export type Q = { q: string; o: string[]; a: number; ex: string }
 
+export type Track = { subjectId: string; fileId?: string }
+
 export default function QuizRunner({
   questions,
   mode,
   t,
   rtl,
+  track,
 }: {
   questions: Q[]
   mode: 'quiz' | 'flash'
   t: Dict['quiz']
   rtl?: boolean
+  // When provided, finishing a run records one row per answer (Weakness Radar).
+  track?: Track
 }) {
-  return mode === 'quiz' ? <Quiz questions={questions} t={t} rtl={rtl} /> : <Flash questions={questions} t={t} rtl={rtl} />
+  return mode === 'quiz' ? <Quiz questions={questions} t={t} rtl={rtl} track={track} /> : <Flash questions={questions} t={t} rtl={rtl} />
 }
 
 // Shared navigation: horizontal swipe on the card area (mirrored for RTL —
@@ -81,7 +86,7 @@ function useNav({
   return { onTouchStart, onTouchEnd }
 }
 
-function Quiz({ questions, t, rtl }: { questions: Q[]; t: Dict['quiz']; rtl?: boolean }) {
+function Quiz({ questions, t, rtl, track }: { questions: Q[]; t: Dict['quiz']; rtl?: boolean; track?: Track }) {
   const [order, setOrder] = useState<number[]>(() => questions.map((_, i) => i))
   const [pos, setPos] = useState(0)
   // One pick per POSITION (not per question) so going back shows the exact
@@ -89,6 +94,24 @@ function Quiz({ questions, t, rtl }: { questions: Q[]; t: Dict['quiz']; rtl?: bo
   const [picks, setPicks] = useState<(number | null)[]>(() => questions.map(() => null))
   const [done, setDone] = useState(false)
   const topRef = useRef<HTMLDivElement>(null)
+  const posted = useRef(false)
+
+  // Weakness Radar: one POST per finished run. Restart clears the guard so a
+  // second full run is recorded as a fresh attempt — that is exactly the
+  // improvement signal the radar wants.
+  useEffect(() => {
+    if (!done || !track || posted.current) return
+    posted.current = true
+    const results = order
+      .map((qi, p) => ({ q: questions[qi].q, correct: picks[p] === questions[qi].a, answered: picks[p] !== null }))
+      .filter((r) => r.answered)
+      .map(({ q, correct }) => ({ q, correct }))
+    void fetch('/api/radar', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subjectId: track.subjectId, fileId: track.fileId, results }),
+    }).catch(() => {}) // a missed attempt is a cosmetic gap, never a user-facing error
+  }, [done])
 
   const picked = picks[pos]
   const q = questions[order[pos]]
@@ -101,6 +124,7 @@ function Quiz({ questions, t, rtl }: { questions: Q[]; t: Dict['quiz']; rtl?: bo
     setPos(0)
     setPicks(list.map(() => null))
     setDone(false)
+    posted.current = false
   }
 
   const pick = (i: number) => {
