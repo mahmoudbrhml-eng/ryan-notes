@@ -37,6 +37,10 @@
   ],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "skills",
+    "download",
+    "testfiles",
+    "upload"
   ]
 }
