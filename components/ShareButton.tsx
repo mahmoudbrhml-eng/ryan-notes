@@ -58,17 +58,17 @@ export default function ShareButton({
       setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    // the trigger scrolls with the page — a drifting fixed panel is worse than a closed one
-    const onScroll = () => setOpen(false)
+    // fixed panels don't scroll with the page: re-anchor to the trigger live
+    const onMove = () => place()
     document.addEventListener('pointerdown', onDown)
     document.addEventListener('keydown', onKey)
-    window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', onScroll)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
     return () => {
       document.removeEventListener('pointerdown', onDown)
       document.removeEventListener('keydown', onKey)
-      window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', onScroll)
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
     }
   }, [open])
 
