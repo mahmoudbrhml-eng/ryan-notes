@@ -8,6 +8,7 @@ import NewSubject from './NewSubject'
 import { signOut } from '@/app/subjects/actions'
 import { getI18n } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase/server'
+import { getPlanStatus, planChip } from '@/lib/plans'
 
 export default async function AppShell({
   title,
@@ -23,6 +24,7 @@ export default async function AppShell({
   const { data } = await supabase.auth.getClaims()
   const email = (data?.claims as { email?: string } | undefined)?.email ?? ''
   const initial = (email[0] ?? 'R').toUpperCase()
+  const plan = (await getPlanStatus(supabase))?.plan ?? 'free'
 
   return (
     <div className="min-h-screen">
@@ -56,6 +58,11 @@ export default async function AppShell({
           panelClassName="w-64"
         >
           <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
+          <Link href="/plan" className="menu-item">
+            <Icon name="star" className="h-4 w-4" />
+            <span className="flex-1">{t.plan.menu}</span>
+            <span className={`chip shrink-0 border-0 ${planChip[plan]}`} dir="ltr">{t.plan[plan]}</span>
+          </Link>
           <Link href="/telegram" className="menu-item">
             <Icon name="send" className="h-4 w-4" />
             {t.tg.menu}

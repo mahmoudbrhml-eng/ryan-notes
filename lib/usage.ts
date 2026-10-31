@@ -8,7 +8,8 @@ import type { CallInfo } from './gemini'
 // user_id is filled by the column default (auth.uid()); failures are swallowed
 // — telemetry must never break an AI response. `after()` keeps the insert
 // running after the response is already on the wire (Vercel would otherwise
-// freeze the function and lose the row).
+// freeze the function and lose the row). Successful calls also add their real
+// token counts to the user's plan usage (ai_usage.tokens_used).
 export function tracker(sb: SupabaseClient, feature: string): (i: CallInfo) => void {
   return (i) => {
     after(async () => {
@@ -23,6 +24,12 @@ export function tracker(sb: SupabaseClient, feature: string): (i: CallInfo) => v
           out_tokens: i.outTokens,
           ms: Math.min(i.ms, 2_000_000_000),
         })
+        if (i.ok && (i.inTokens || i.outTokens)) {
+          await sb.rpc('add_tokens', {
+            p_in_tokens: Math.max(0, i.inTokens ?? 0),
+            p_out_tokens: Math.max(0, i.outTokens ?? 0),
+          })
+        }
       } catch {}
     })
   }

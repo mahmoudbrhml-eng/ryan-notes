@@ -5,6 +5,7 @@ import { quizPrompt, type NotesLang } from '@/lib/prompts'
 import { sampleText } from '@/lib/clean'
 import { parseQuiz } from '@/lib/quizparse'
 import { tracker } from '@/lib/usage'
+import { guardQuota } from '@/lib/quota'
 
 // Practice generator: a fresh quiz aimed at the questions the student keeps
 // missing. Nothing is persisted — the questions travel straight back to the
@@ -15,7 +16,6 @@ import { tracker } from '@/lib/usage'
 
 export const maxDuration = 300
 
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
@@ -72,9 +72,8 @@ export async function POST(req: Request) {
     if (weak.length === 0) return fail('No weak spots yet — finish a quiz first.', 409, 'no_data')
 
     // Fail closed: if the usage check itself errors, no AI call goes out.
-    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'quiz' })
-    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
-    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    const q = await guardQuota(supabase, 'quiz')
+    if (!q.ok) return fail(q.error, q.status, q.code)
 
     const focus =
       `\n\nFOCUS ON WEAK SPOTS: this student answered the questions below WRONG recently. ` +

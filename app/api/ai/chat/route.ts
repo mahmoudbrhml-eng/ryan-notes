@@ -4,10 +4,10 @@ import { GeminiError, generate } from '@/lib/gemini'
 import { chatSystem, type ChatMode, type NotesLang } from '@/lib/prompts'
 import { pickRelevant } from '@/lib/retrieve'
 import { tracker } from '@/lib/usage'
+import { guardQuota } from '@/lib/quota'
 
 export const maxDuration = 300
 
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
@@ -45,9 +45,8 @@ export async function POST(req: Request) {
     // Fail closed: if the usage check itself errors, no AI call goes out.
     // A failed generation refunds the call (see refund_usage) so users are
     // never charged for answers they did not get.
-    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'chat' })
-    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
-    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    const q = await guardQuota(supabase, 'chat')
+    if (!q.ok) return fail(q.error, q.status, q.code)
 
     // Small material is sent whole; large material is reduced to the passages that match the question.
     const lastUser = [...hist].reverse().find((h) => h.role === 'user')

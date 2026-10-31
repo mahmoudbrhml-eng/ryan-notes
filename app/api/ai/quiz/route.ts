@@ -5,11 +5,11 @@ import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
 import { parseQuiz, type Q } from '@/lib/quizparse'
 import { sampleText } from '@/lib/clean'
 import { tracker } from '@/lib/usage'
+import { guardQuota } from '@/lib/quota'
 import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 
 export const maxDuration = 300
 
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
@@ -39,9 +39,8 @@ export async function POST(req: Request) {
     if (!tr || !tr.content) return fail('Transcribe the file first.', 409, 'need_transcript')
 
     // Fail closed: if the usage check itself errors, no AI call goes out.
-    const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'quiz' })
-    if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
-    if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+    const q = await guardQuota(supabase, 'quiz')
+    if (!q.ok) return fail(q.error, q.status, q.code)
 
     let raw: string
     try {

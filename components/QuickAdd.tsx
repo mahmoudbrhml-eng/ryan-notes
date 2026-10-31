@@ -51,7 +51,7 @@ export default function QuickAdd({
       const r = await prepareAndUpload(file, {
         userId,
         subjectId,
-        msgs: { storageLimit: t.src.storageLimit, compressBigFail: t.src.compressBigFail, splitFail: t.src.splitFail, tooBig: t.upload.tooBig },
+        msgs: { storageLimit: t.src.storageLimit, compressBigFail: t.src.compressBigFail, splitFail: t.src.splitFail, tooBig: t.upload.tooBig, planSize: t.src.planSize },
         on: (s: PrepStage, pct?: number) => patch(key, { state: s, pct }),
       })
       if (r.ok) {

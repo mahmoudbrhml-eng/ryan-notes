@@ -6,6 +6,7 @@ import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
 import { parsePartName, planChunks, spreadDuration, type FilePart } from '@/lib/parts'
 import { tracker } from '@/lib/usage'
+import { guardQuota } from '@/lib/quota'
 import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 import { PDFDocument } from 'pdf-lib'
 
@@ -14,7 +15,6 @@ export const maxDuration = 300
 const SEG = 300 // seconds of audio per request
 const TEXT_CHUNK = 9000
 const PAGES_PER_CHUNK = 6
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT ?? 400)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 type Parts = Record<string, string>
@@ -123,9 +123,8 @@ async function handle(req: Request) {
   const plist = normalizeParts(file.parts, file.storage_path, file.name)
 
   // Fail closed: if the usage check itself errors, no AI call goes out.
-  const { data: used, error: usageErr } = await supabase.rpc('bump_usage', { p_feature: 'transcribe' })
-  if (usageErr || typeof used !== 'number') return fail('Could not check the daily AI limit. Try again in a moment.', 503, 'limit_check')
-  if (used > DAILY_LIMIT) return fail('Daily AI limit reached. Try again tomorrow.', 429, 'limit')
+  const q = await guardQuota(supabase, 'transcribe')
+  if (!q.ok) return fail(q.error, q.status, q.code)
   // Any failed AI step below gives the call back instead of charging it.
   const refund = () => after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'transcribe' }) } catch {} })
 

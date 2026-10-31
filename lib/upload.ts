@@ -14,6 +14,27 @@ export const MAX_DOC = 300 * 1024 * 1024 // PDFs are split in the browser first
 export const SAFE_RAW = 48 * 1024 * 1024 // largest object uploaded untouched
 export const COMPRESS_ABOVE = 45 * 1024 * 1024
 
+// The user's plan caps the size of one upload (20MB free → 2GB max). Fetched
+// once a minute from /api/plan — the same status the bot enforces. If the
+// status cannot be read we fail OPEN (a broken plan API must not block
+// uploads); the AI routes still enforce everything server-side.
+let planCap: { mb: number; at: number } | null = null
+async function planUploadMB(): Promise<number> {
+  if (planCap && Date.now() - planCap.at < 60_000) return planCap.mb
+  try {
+    const r = await fetch('/api/plan')
+    if (r.ok) {
+      const j = await r.json()
+      const mb = Number(j.uploadMB)
+      if (mb > 0) {
+        planCap = { mb, at: Date.now() }
+        return mb
+      }
+    }
+  } catch {}
+  return 2048
+}
+
 const isMedia = (f: File) =>
   /^(audio|video)\//.test(f.type) ||
   /\.(mp3|m4a|wav|ogg|oga|aac|flac|mp4|webm|mov|mkv|avi|3gp|amr|opus|wma)$/i.test(f.name)
@@ -26,6 +47,7 @@ export type UploadMsgs = {
   compressBigFail: string
   splitFail: string
   tooBig: string
+  planSize?: string
 }
 
 export type UploadOutcome = { ok: true; parts: number } | { ok: false; error: string }
@@ -51,6 +73,13 @@ export async function prepareAndUpload(
   const { userId, subjectId, msgs, on } = opts
   const supabase = createClient()
   const media = isMedia(file)
+
+  // Plan cap first: the business rule. Hard storage caps are checked after.
+  const planMB = await planUploadMB()
+  if (file.size > planMB * 1024 * 1024) {
+    reportFail('plan-too-big', file)
+    return { ok: false, error: msgs.planSize ?? 'This file is larger than your plan allows. Upgrade your plan for bigger uploads.' }
+  }
 
   if (file.size > (media ? MAX_MEDIA : MAX_DOC)) {
     reportFail('too-big', file)
