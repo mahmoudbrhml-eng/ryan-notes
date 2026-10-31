@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import AddToPlan from '@/components/AddToPlan'
 import AppShell from '@/components/AppShell'
 import ChatPanel from '@/components/ChatPanel'
 import ExportButtons from '@/components/ExportButtons'
 import Icon, { type IconName } from '@/components/Icon'
 import Markdown, { tocOf } from '@/components/Markdown'
+import MindMap from '@/components/MindMap'
 import PanelSwipe from '@/components/PanelSwipe'
 import QuickAdd from '@/components/QuickAdd'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
@@ -19,9 +21,10 @@ import { getI18n } from '@/lib/i18n'
 import { fmtDate, fmtSize } from '@/lib/format'
 import { kindOf } from '@/lib/filekind'
 import { extractFocus } from '@/lib/focus'
+import type { MindNode } from '@/lib/prompts'
 import { createClient } from '@/lib/supabase/server'
 
-const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash', 'radar', 'combo']
+const TABS: readonly Tab[] = ['overview', 'chat', 'transcript', 'summary', 'focus', 'quiz', 'flash', 'mind', 'radar', 'combo']
 type Panel = 'sources' | 'notes' | 'studio'
 
 const hostOf = (u: string) => {
@@ -89,6 +92,7 @@ export default async function SubjectPage({
   const transcript = sel.find((o) => o.kind === 'transcript')?.content ?? ''
   const summary = sel.find((o) => o.kind === 'summary')?.content ?? ''
   const questions = ((sel.find((o) => o.kind === 'quiz')?.data as { questions?: Q[] } | null)?.questions ?? []) as Q[]
+  const mindmap = (sel.find((o) => o.kind === 'mindmap')?.data ?? null) as MindNode | null
 
   const dirOf = (l?: string | null) => (l === 'en' ? 'ltr' : 'rtl') as 'ltr' | 'rtl'
   const tLang = sel.find((o) => o.kind === 'transcript')?.lang as string | undefined
@@ -128,6 +132,7 @@ export default async function SubjectPage({
     transcript: has(f.id, 'transcript'),
     summary: has(f.id, 'summary'),
     quiz: has(f.id, 'quiz'),
+    mind: has(f.id, 'mindmap'),
   }))
   const generated = outs
     .filter((o) => o.file_id === activeId && (o.kind === 'transcript' || o.kind === 'summary' || o.kind === 'quiz'))
@@ -139,6 +144,7 @@ export default async function SubjectPage({
     { tab: 'focus', icon: 'star', label: t.tools.focus, ready: focusItems.length > 0 },
     { tab: 'quiz', icon: 'quiz', label: t.tools.quiz, ready: questions.length > 0 },
     { tab: 'flash', icon: 'flash', label: t.tools.flash, ready: questions.length > 0 },
+    { tab: 'mind', icon: 'mind', label: t.tools.mind, ready: !!mindmap },
   ]
   const title = tab === 'overview' ? t.ws.overview : tab === 'combo' ? t.tools.merged : t.tools[tab]
   const isVideo = (active?.mime ?? '').startsWith('video/') && active?.mime !== 'video/youtube'
@@ -172,6 +178,15 @@ export default async function SubjectPage({
                       <a href={activeUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm w-fit">
                         {t.ws.openFile}
                       </a>
+                    )}
+                    {transcript && (
+                      <AddToPlan
+                        fileId={active.id}
+                        lang={lang === 'en' ? 'en' : 'ar'}
+                        label={t.study.addBtn}
+                        added={t.study.added}
+                        err={t.study.err}
+                      />
                     )}
                   </div>
                   <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))' }}>
@@ -272,6 +287,9 @@ export default async function SubjectPage({
               ))}
 
             {tab === 'radar' && <Radar subjectId={subject.id} t={t.radar} quizT={t.quiz} rtl={lang !== 'en'} />}
+
+            {tab === 'mind' &&
+              (mindmap ? <MindMap tree={mindmap} hint={t.mind.hint} /> : <p className="muted py-10 text-center">{t.mind.empty}</p>)}
     </>
   )
 

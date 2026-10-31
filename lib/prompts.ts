@@ -92,6 +92,15 @@ export const quizPrompt = (lang: NotesLang, md: string, count: number, level: Qu
     custom,
   ) + `\n\nLECTURE NOTES:\n${md.slice(0, 300000)}`
 
+// ---- Mind map (خريطة ذهنية): a compact JSON tree rendered by MindMap.tsx ----
+export type MindNode = { t: string; c?: MindNode[] }
+
+export const mindmapPrompt = (lang: NotesLang, md: string, custom?: string) =>
+  withCustom(
+    `You are a study-skills expert. Turn the lecture notes below into ONE mind map the student can review from in two minutes. Return ONLY JSON (no markdown fences): {"title": string, "children": [{"t": string, "children": [{"t": string}]}]}. Rules: the root title names the lecture topic; exactly 3 levels (root → 4-7 main branches → 2-6 leaves per branch); each node is at most 8 words, no punctuation decoration; cover the WHOLE lecture (beginning, middle and end), prioritize points the lecturer stressed (lines starting with "> ⭐️ Doctor's Focus"); use only facts from the notes, never invent; keep medical terms in English; write node text in ${LANG_NAME[lang]}.`,
+    custom,
+  ) + `\n\nLECTURE NOTES:\n${md.slice(0, 200000)}`
+
 export type ChatMode = 'explain' | 'exam' | 'clinical' | 'teach'
 
 const MODE_RULES: Record<ChatMode, string> = {

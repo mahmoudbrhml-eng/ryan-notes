@@ -24,8 +24,9 @@ export type StudioFile = {
   transcript: boolean
   summary: boolean
   quiz: boolean
+  mind: boolean
 }
-export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'radar' | 'combo'
+export type Tab = 'overview' | 'chat' | 'transcript' | 'summary' | 'focus' | 'quiz' | 'flash' | 'mind' | 'radar' | 'combo'
 type NLang = 'ar' | 'en' | 'fa' | 'custom'
 type JobKind = 'notes' | 'summary' | 'quiz'
 
@@ -98,6 +99,7 @@ export default function StudioPanel({
     { key: 'focus', icon: 'star', label: t.tools.focus, to: href('focus'), current: tab === 'focus' },
     { key: 'quiz', icon: 'quiz', label: t.tools.quiz, to: href('quiz'), current: tab === 'quiz' },
     { key: 'flash', icon: 'flash', label: t.tools.flash, to: href('flash'), current: tab === 'flash' },
+    { key: 'mind', icon: 'mind', label: t.tools.mind, to: href('mind'), current: tab === 'mind' },
     { key: 'radar', icon: 'radar', label: t.tools.radar, to: href('radar'), current: tab === 'radar' },
   ]
   const langOpts = [
@@ -160,15 +162,20 @@ export default function StudioPanel({
     }
   }
 
-  async function runSimple(kind: 'summary' | 'quiz') {
+  async function runSimple(kind: 'summary' | 'quiz' | 'mindmap') {
     if (!file) return
     const fid = file.id
     setBusy({ kind, fileId: fid })
     setErr(null)
     try {
-      await postJson(`/api/ai/${kind}`, kind === 'summary' ? { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, length, custom: customText } : { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, count, level, custom: customText })
+      const base = { fileId: fid, lang: lang === 'custom' ? 'ar' : lang, custom: customText }
+      await postJson(
+        `/api/ai/${kind}`,
+        kind === 'summary' ? { ...base, length } : kind === 'quiz' ? { ...base, count, level } : base,
+      )
       // Stay in the Studio: the result appears right below the controls.
-      if (activeRef.current === fid) router.push(`/subjects/${subjectId}?f=${fid}&tab=${tab === 'flash' ? 'flash' : kind}&p=studio`)
+      const tabName = kind === 'mindmap' ? 'mind' : kind
+      if (activeRef.current === fid) router.push(`/subjects/${subjectId}?f=${fid}&tab=${tab === 'flash' && kind === 'quiz' ? 'flash' : tabName}&p=studio`)
     } catch (e) {
       setErr({ fileId: fid, text: friendly(e) })
     } finally {
@@ -258,6 +265,7 @@ export default function StudioPanel({
             {tab === 'overview' && <p className="muted text-xs leading-5">{t.ws.pickTool}</p>}
             {tab === 'chat' && <p className="muted text-xs leading-5">{t.studio.chatInfo}</p>}
             {tab === 'focus' && <p className="muted text-xs leading-5">{t.studio.focusInfo}</p>}
+            {tab === 'mind' && <p className="muted text-xs leading-5">{t.studio.mindInfo}</p>}
 
             {tab === 'transcript' &&
               (file.kind === 'unsupported' ? (
@@ -317,7 +325,18 @@ export default function StudioPanel({
               </>
             )}
 
-            {needT && (tab === 'summary' || tab === 'quiz' || tab === 'flash') && (
+            {tab === 'mind' && (
+              <>
+                <Sel label={t.studio.language} value={lang} onChange={setLang} options={langOpts} />
+                {customField}
+                <button type="button" className="btn btn-primary btn-sm" disabled={busyHere || !!needT} onClick={() => runSimple('mindmap')}>
+                  {busyHere && busy?.kind === 'mindmap' && <span className="spinner" />}
+                  {busyHere && busy?.kind === 'mindmap' ? t.studio.working : file.mind ? t.studio.regenerate : t.studio.generate}
+                </button>
+              </>
+            )}
+
+            {needT && (tab === 'summary' || tab === 'quiz' || tab === 'flash' || tab === 'mind') && (
               <p className="text-xs leading-5 text-warn">{t.studio.needTranscript}</p>
             )}
           </>

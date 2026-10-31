@@ -58,6 +58,10 @@ export default async function AppShell({
           panelClassName="w-64"
         >
           <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
+          <Link href="/planner" className="menu-item">
+            <Icon name="cal" className="h-4 w-4" />
+            <span className="flex-1">{t.study.menu}</span>
+          </Link>
           <Link href="/plan" className="menu-item">
             <Icon name="star" className="h-4 w-4" />
             <span className="flex-1">{t.plan.menu}</span>

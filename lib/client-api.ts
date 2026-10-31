@@ -35,10 +35,15 @@ export function mediaDuration(url: string, video: boolean): Promise<number> {
 
 // Retries network drops, empty 5xx replies and the server's "switch key and retry" signal.
 export async function postJson(url: string, body: object): Promise<Resp> {
+  return sendJson(url, body, 'POST')
+}
+
+// Same contract as postJson, for PATCH/DELETE routes (e.g. /api/planner).
+export async function sendJson(url: string, body: object, method: 'POST' | 'PATCH' | 'DELETE'): Promise<Resp> {
   let last = new ApiError('', 'timeout')
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const j = (await r.json().catch(() => null)) as Resp | null
       if (r.ok) return j ?? {}
       if (j?.retry) {
