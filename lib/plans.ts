@@ -1,16 +1,24 @@
-// Plan limits — the single source of truth is sql/10_plans.sql (consume_quota
-// / get_plan_status). Keep these numbers in sync with it. Pure data + types
+// Plan limits — the single source of truth is sql/10_plans.sql + the additive
+// patch sql/10c_audio_hours.sql (consume_quota / consume_transcribe_quota /
+// get_plan_status). Keep these numbers in sync with them. Pure data + types
 // only: this file must stay importable from both server and client code.
+//
+// Transcribing AUDIO/VIDEO is metered in MONTHLY HOURS (hoursPerMonth — the
+// recording's real duration; see consume_transcribe_quota). Calls/tokens stay
+// for the other AI features (summary, quiz, chat, merge) and for text
+// conversions; uploadMB caps a single upload.
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type Plan = 'free' | 'plus' | 'pro' | 'max'
 export const PLAN_ORDER: Plan[] = ['free', 'plus', 'pro', 'max']
 
-export const PLANS: Record<Plan, { callsPerDay: number; tokensPerDay: number; uploadMB: number }> = {
-  free: { callsPerDay: 5, tokensPerDay: 1_000_000, uploadMB: 20 },
-  plus: { callsPerDay: 20, tokensPerDay: 4_000_000, uploadMB: 100 },
-  pro: { callsPerDay: 100, tokensPerDay: 10_000_000, uploadMB: 500 },
-  max: { callsPerDay: Infinity, tokensPerDay: Infinity, uploadMB: 2048 },
+export const PLANS: Record<Plan, {
+  callsPerDay: number; tokensPerDay: number; uploadMB: number; hoursPerMonth: number
+}> = {
+  free: { callsPerDay: 5, tokensPerDay: 1_000_000, uploadMB: 20, hoursPerMonth: 10 },
+  plus: { callsPerDay: 20, tokensPerDay: 4_000_000, uploadMB: 100, hoursPerMonth: 30 },
+  pro: { callsPerDay: 100, tokensPerDay: 10_000_000, uploadMB: 500, hoursPerMonth: 60 },
+  max: { callsPerDay: Infinity, tokensPerDay: Infinity, uploadMB: 2048, hoursPerMonth: Infinity },
 }
 
 export type PlanStatus = {
@@ -21,6 +29,8 @@ export type PlanStatus = {
   tokensUsed: number
   tokensLimit: number | null
   uploadMB: number
+  audioSecondsUsed: number
+  audioSecondsLimit: number | null // null = unlimited
 }
 
 type RpcStatus = {
@@ -32,6 +42,8 @@ type RpcStatus = {
   tokens_used?: number
   tokens_limit?: number | null
   upload_mb?: number
+  audio_seconds_used?: number
+  audio_seconds_limit?: number | null
 }
 
 export function normalizeStatus(j: RpcStatus): PlanStatus {
@@ -44,6 +56,8 @@ export function normalizeStatus(j: RpcStatus): PlanStatus {
     tokensUsed: Number(j.tokens_used ?? 0),
     tokensLimit: j.tokens_limit == null ? null : Number(j.tokens_limit),
     uploadMB: Number(j.upload_mb ?? PLANS[plan].uploadMB),
+    audioSecondsUsed: Number(j.audio_seconds_used ?? 0),
+    audioSecondsLimit: j.audio_seconds_limit == null ? null : Number(j.audio_seconds_limit),
   }
 }
 
@@ -57,6 +71,33 @@ export async function getPlanStatus(sb: SupabaseClient): Promise<PlanStatus | nu
 export type QuotaVerdict =
   | { ok: true; plan: Plan; callsUsed: number; callsLimit: number | null }
   | { ok: false; status: number; error: string; code: string }
+
+// Atomic check + charge of ONE transcription against the monthly-hours quota
+// (media = charged by real duration; doc/text = daily token check only, no
+// call charge). Same fail-closed contract as consumeQuota. `upsellHours` /
+// `upsellTokens` are the localized messages shown on 429.
+export async function consumeTranscribeQuota(
+  sb: SupabaseClient,
+  media: boolean,
+  seconds: number,
+  upsellHours: string,
+  upsellTokens: string,
+): Promise<QuotaVerdict> {
+  const { data, error } = await sb.rpc('consume_transcribe_quota', {
+    p_media: media,
+    p_seconds: Math.max(0, Math.round(seconds || 0)),
+  })
+  if (error || !data) {
+    return { ok: false, status: 503, code: 'limit_check', error: 'Could not check your plan limits. Try again in a moment.' }
+  }
+  const j = data as { allowed?: boolean; reason?: string }
+  if (j.allowed !== true) {
+    if (j.reason === 'auth') return { ok: false, status: 401, code: 'auth', error: 'Please log in again.' }
+    return { ok: false, status: 429, code: 'plan_limit', error: j.reason === 'hours' ? upsellHours : upsellTokens }
+  }
+  const s = normalizeStatus(data as RpcStatus)
+  return { ok: true, plan: s.plan, callsUsed: s.callsUsed, callsLimit: s.callsLimit }
+}
 
 // Atomic check + charge of ONE AI call. Fails CLOSED: when the check itself
 // errors, no AI call goes out (same contract as the old bump_usage guard).
@@ -86,3 +127,8 @@ export const planChip: Record<Plan, string> = {
 export const fmtTokens = (n: number | null) =>
   n == null ? '∞' : n >= 1_000_000 ? `${n / 1_000_000}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n)
 export const fmtMB = (mb: number) => (mb >= 1024 ? `${mb / 1024}GB` : `${mb}MB`)
+// 36000 seconds -> "10h"; null (max plan) -> "∞"
+export const fmtHours = (seconds: number | null) =>
+  seconds == null
+    ? '∞'
+    : `${Math.round(seconds / 360) / 10}h` // one decimal, trims trailing .0

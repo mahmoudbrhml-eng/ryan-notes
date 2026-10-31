@@ -6,7 +6,7 @@ import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
 import { parsePartName, planChunks, spreadDuration, type FilePart } from '@/lib/parts'
 import { tracker } from '@/lib/usage'
-import { guardQuota } from '@/lib/quota'
+import { guardTranscribeQuota } from '@/lib/quota'
 import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 import { PDFDocument } from 'pdf-lib'
 
@@ -108,7 +108,6 @@ async function handle(req: Request) {
 
   const keys = apiKeys()
   if (keys.length === 0) return fail('AI is not configured yet: add GEMINI_API_KEYS in Vercel.', 503, 'config')
-  const trk = tracker(supabase, 'transcribe')
 
   const { data: file } = await supabase
     .from('files')
@@ -120,13 +119,12 @@ async function handle(req: Request) {
   const kind = kindOf(file.name, file.mime)
   if (kind === 'unsupported') return fail('This file type is not supported yet. Export DOCX/PPTX to PDF first.', 415)
 
-  const plist = normalizeParts(file.parts, file.storage_path, file.name)
+  // Audio/video tokens are enormous and meaningless to students: media
+  // transcription is metered in monthly HOURS instead, so its calls are kept
+  // out of the daily token budget. Documents/text still report their tokens.
+  const trk = tracker(supabase, 'transcribe', { noTokens: kind === 'media' })
 
-  // Fail closed: if the usage check itself errors, no AI call goes out.
-  const q = await guardQuota(supabase, 'transcribe')
-  if (!q.ok) return fail(q.error, q.status, q.code)
-  // Any failed AI step below gives the call back instead of charging it.
-  const refund = () => after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'transcribe' }) } catch {} })
+  const plist = normalizeParts(file.parts, file.storage_path, file.name)
 
   const { data: out } = await supabase
     .from('outputs')
@@ -189,6 +187,11 @@ async function handle(req: Request) {
 
   // ---- START: plan the chunks, upload the file to the AI service, create/reset the output row ----
   if (action === 'start') {
+    // The hours/tokens gate: charged ONCE per file, right before the first
+    // transcript row is created — resuming or restarting the same recording
+    // never charges again. Media is charged its REAL duration against the
+    // monthly hours budget; documents/text only pass the daily token check.
+    let chargedSeconds = 0
     try {
       const restart = body.restart === true
       const duration = Number(body.duration) > 0 ? Number(body.duration) : 0
@@ -261,6 +264,12 @@ async function handle(req: Request) {
         (!plist || (old.plist?.length === plist.length && old.plist[plist.length - 1].path === plist[plist.length - 1].path))
       const parts: Parts = resumable ? old!.parts : {}
 
+      if (!old) {
+        const q = await guardTranscribeQuota(supabase, kind === 'media', Math.ceil(dur || 0))
+        if (!q.ok) return fail(q.error, q.status, q.code)
+        if (kind === 'media') chargedSeconds = Math.ceil(dur || 0)
+      }
+
       let gemini: Data['gemini'] = null
       let gem: Data['gem'] | null = null
       if (kind === 'media' || kind === 'doc') {
@@ -304,7 +313,9 @@ async function handle(req: Request) {
       await supabase.from('files').update({ ai_status: 'processing', ai_error: null }).eq('id', fileId)
       return NextResponse.json({ total, kind, done: Object.keys(parts).map(Number) })
     } catch (e) {
-      refund()
+      if (chargedSeconds > 0) {
+        after(async () => { try { await supabase.rpc('refund_transcribe_quota', { p_media: true, p_seconds: chargedSeconds }) } catch {} })
+      }
       await setError(e instanceof Error ? e.message : 'Failed to start')
       throw e
     }
@@ -368,7 +379,7 @@ async function handle(req: Request) {
       }
       return NextResponse.json({ ok: true, index: i, complete: doneAll })
     } catch (e) {
-      if (e instanceof GeminiError && e.code === 'quota') refund()
+      if (e instanceof GeminiError && e.code === 'quota') throw e
       await setError(e instanceof Error ? e.message : 'Failed')
       throw e
     }
@@ -465,7 +476,6 @@ async function handle(req: Request) {
         }
         return NextResponse.json({ error: 'Switching to another AI key…', code: 'retry', retry: true }, { status: 503 })
       }
-      refund()
       throw e
     }
     const newParts = { ...old.parts }

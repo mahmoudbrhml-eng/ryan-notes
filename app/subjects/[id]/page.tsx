@@ -162,6 +162,12 @@ export default async function SubjectPage({
                         {t.ws.openVideo}
                       </a>
                     )}
+                    {!active.source_url && !isAudio && !isVideo && activeUrl &&
+                      (/pdf/i.test(active.mime ?? '') || /\.pdf$/i.test(active.name)) && (
+                      <Link href={`/read/${active.id}`} className="btn btn-soft btn-sm w-fit">
+                        {t.reader.open}
+                      </Link>
+                    )}
                     {!active.source_url && !isAudio && !isVideo && activeUrl && (
                       <a href={activeUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm w-fit">
                         {t.ws.openFile}
