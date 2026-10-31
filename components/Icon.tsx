@@ -44,6 +44,7 @@ const P = {
   slides: 'M6 3h8l4 4v14H6zM14 3v4h4M10.5 11.5l4.5 2.5-4.5 2.5z',
   chevU: 'M6 15l6-6 6 6',
   chevD: 'M6 9l6 6 6-6',
+  share: 'M8.6 10.7l6.8-3.9M8.6 13.3l6.8 3.9M18 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18 21.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM6 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
 } as const
 
 export type IconName = keyof typeof P

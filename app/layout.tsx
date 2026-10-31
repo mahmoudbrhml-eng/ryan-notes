@@ -8,7 +8,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const cairo = Cairo({ subsets: ['arabic', 'latin'], variable: '--font-cairo' })
 
 export const metadata: Metadata = {
-  title: 'Ryan Notes',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ryan-notes-zeta.vercel.app'),
+  title: { default: 'Ryan Notes', template: '%s · Ryan Notes' },
   description: 'Study smarter with your lectures',
 }
 

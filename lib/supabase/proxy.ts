@@ -28,7 +28,8 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login')
-  const isPublic = path === '/' || isAuthPage || path.startsWith('/auth')
+  // /s/<token> is the public share page: no account needed to view it.
+  const isPublic = path === '/' || isAuthPage || path.startsWith('/auth') || path.startsWith('/s/')
 
   if (!loggedIn && !isPublic) {
     const url = request.nextUrl.clone()

@@ -9,6 +9,7 @@ import PanelSwipe from '@/components/PanelSwipe'
 import QuickAdd from '@/components/QuickAdd'
 import QuizRunner, { type Q } from '@/components/QuizRunner'
 import ReadControls from '@/components/ReadControls'
+import ShareButton from '@/components/ShareButton'
 import SourcesPanel, { type SrcFile } from '@/components/SourcesPanel'
 import { SelectionProvider } from '@/components/Selection'
 import StudioPanel, { type StudioFile, type Tab } from '@/components/StudioPanel'
@@ -311,6 +312,20 @@ export default async function SubjectPage({
                   pdfHref={`/subjects/${id}/print?k=merged&m=${combo.id}`}
                   labels={exportLabels}
                 />
+              )}
+              {/* Public share link: the content travels to WhatsApp/Telegram
+                  before anyone even opens the site — the growth loop. */}
+              {tab === 'transcript' && transcript && (
+                <ShareButton kind="transcript" fileId={activeId ?? undefined} shareTitle={`${subject.name} · ${outName}`} labels={t.share} />
+              )}
+              {tab === 'summary' && summary && (
+                <ShareButton kind="summary" fileId={activeId ?? undefined} shareTitle={`${subject.name} · ${outName}`} labels={t.share} />
+              )}
+              {(tab === 'quiz' || tab === 'flash') && questions.length > 0 && (
+                <ShareButton kind="quiz" fileId={activeId ?? undefined} shareTitle={`${subject.name} · ${outName}`} labels={t.share} />
+              )}
+              {tab === 'combo' && combo && (
+                <ShareButton kind="combo" comboId={combo.id} shareTitle={`${subject.name} · ${String(combo.title ?? outName)}`} labels={t.share} />
               )}
             </div>
           </div>

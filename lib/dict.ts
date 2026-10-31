@@ -139,6 +139,26 @@ export const en = {
   read: {
     size: 'Text size', spacing: 'Line spacing', reset: 'Reset reading view',
   },
+  share: {
+    btn: 'Share',
+    creating: 'Creating the link…',
+    copied: 'Link copied — send it to your friends',
+    native: 'Share…',
+    wa: 'WhatsApp',
+    tg: 'Telegram',
+    copy: 'Copy link',
+    fail: 'Could not create the link. Try again.',
+  },
+  pub: {
+    madeBy: 'Shared via Ryan Notes',
+    views: '{n} views',
+    quizHint: 'Interactive quiz — tap an answer to check yourself.',
+    notesHint: 'Read-only notes shared by a student.',
+    ctaTitle: 'Make your own — from YOUR lectures',
+    ctaSub: 'Upload a lecture and get a transcript, summary and quiz automatically. Free.',
+    ctaBtn: 'Start free',
+    legal: 'Study aid only — not medical advice.',
+  },
   login: {
     tagline: 'Study smarter, one lecture at a time.',
     tabIn: 'Log in', tabUp: 'Sign up', email: 'Email', password: 'Password',
@@ -383,6 +403,26 @@ export const ar: Dict = {
   },
   read: {
     size: 'حجم الخط', spacing: 'تباعد الأسطر', reset: 'رجّع العرض الطبيعي',
+  },
+  share: {
+    btn: 'مشاركة',
+    creating: 'بنجهّز الرابط…',
+    copied: 'الرابط اتنسخ — ابعتة لأصحابك',
+    native: 'مشاركة…',
+    wa: 'واتساب',
+    tg: 'تليجرام',
+    copy: 'نسخ الرابط',
+    fail: 'معرفناش نجهّز الرابط. جرّب تاني.',
+  },
+  pub: {
+    madeBy: 'مشاركة عبر Ryan Notes',
+    views: '{n} مشاهدة',
+    quizHint: 'اختبار تفاعلي — دوس على إجابة وشوف صح ولا غلط.',
+    notesHint: 'ملاحظات للقراءة فقط، الطالب شاركها لزمايله.',
+    ctaTitle: 'اعمل نسختك من محاضراتك إنت',
+    ctaSub: 'ارفع محاضرة وهتلاقي تفريغ وملخص واختبار أوتوماتيك. مجانًا.',
+    ctaBtn: 'ابدأ مجانًا',
+    legal: 'أداة مساعدة للمذاكرة فقط — مش بديل عن الاستشارة الطبية.',
   },
   login: {
     tagline: 'ذاكر بذكاء، محاضرة محاضرة.',
