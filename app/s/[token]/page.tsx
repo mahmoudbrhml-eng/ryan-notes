@@ -78,10 +78,11 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   const share = await loadShare(token)
   if (!share) notFound()
 
-  // One view per open. Cheap update, runs on the fresh dynamic render.
+  // One view per open. Cheap update, awaited — PostgREST builders are lazy,
+  // a floating `void` would never actually send the request.
   {
     const supabase = await createClient()
-    void supabase.rpc('share_seen', { p_token: token })
+    await supabase.rpc('share_seen', { p_token: token })
   }
 
   const { t, dir } = await getI18n()
