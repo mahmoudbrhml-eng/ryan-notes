@@ -4,6 +4,7 @@ import { GeminiError, generate } from '@/lib/gemini'
 import { quizPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
 import { sampleText } from '@/lib/clean'
 import { tracker } from '@/lib/usage'
+import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 
 export const maxDuration = 300
 
@@ -40,7 +41,8 @@ export async function POST(req: Request) {
   try {
     const supabase = await createClient()
     const { data: claims } = await supabase.auth.getClaims()
-    if (!claims?.claims?.sub) return fail('Please log in again.', 401)
+    const userId = claims?.claims?.sub
+    if (!userId) return fail('Please log in again.', 401)
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const fileId = String(body.fileId ?? '')
@@ -86,6 +88,14 @@ export async function POST(req: Request) {
       await supabase.from('outputs').insert({
         subject_id: tr.subject_id, file_id: fileId, kind: 'quiz', title: tr.title, lang: custom ? 'custom' : lang, content: '', data,
       })
+    // Tell the user's Telegram (if linked) that the quiz is ready — the quiz
+    // itself is interactive, so the message links back into the site.
+    after(() =>
+      notifyReady(supabase, userId, 'quiz', {
+        title: tr.title,
+        url: outputUrl(siteOrigin(req), tr.subject_id, fileId, 'quiz'),
+      })
+    )
     return NextResponse.json({ ok: true, count: questions.length })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)

@@ -55,13 +55,21 @@ export default async function AppShell({
           className="grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-brand-soft font-bold text-brand"
           panelClassName="w-64"
         >
-          <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
-          <form action={signOut}>
-            <button className="menu-item">
-              <Icon name="out" className="h-4 w-4" />
-              {t.signOut}
-            </button>
-          </form>
+          {(close) => (
+            <>
+              <p dir="ltr" className="muted truncate px-2 pb-2 text-sm">{email}</p>
+              <Link href="/telegram" className="menu-item" onClick={close}>
+                <Icon name="send" className="h-4 w-4" />
+                {t.tg.menu}
+              </Link>
+              <form action={signOut}>
+                <button className="menu-item">
+                  <Icon name="out" className="h-4 w-4" />
+                  {t.signOut}
+                </button>
+              </form>
+            </>
+          )}
         </Menu>
       </header>
       {children}

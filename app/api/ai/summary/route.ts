@@ -4,6 +4,7 @@ import { GeminiError, generate } from '@/lib/gemini'
 import { summaryPrompt, continueSummaryPrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown, sliceText } from '@/lib/clean'
 import { tracker } from '@/lib/usage'
+import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 
 export const maxDuration = 300
 
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
   try {
     const supabase = await createClient()
     const { data: claims } = await supabase.auth.getClaims()
-    if (!claims?.claims?.sub) return fail('Please log in again.', 401)
+    const userId = claims?.claims?.sub
+    if (!userId) return fail('Please log in again.', 401)
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const fileId = String(body.fileId ?? '')
@@ -93,6 +95,15 @@ export async function POST(req: Request) {
         subject_id: tr.subject_id, file_id: fileId, kind: 'summary', title: tr.title, lang: custom ? 'custom' : lang, content: text,
         summary_kind: length,
       })
+    // Tell the user's Telegram (if linked) that the summary is ready — file
+    // attached, never blocking the response, never failing the request.
+    after(() =>
+      notifyReady(supabase, userId, 'summary', {
+        title: tr.title,
+        url: outputUrl(siteOrigin(req), tr.subject_id, fileId, 'summary'),
+        file: { text },
+      })
+    )
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof GeminiError) return fail(e.message, e.status, e.code)

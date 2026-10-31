@@ -29,7 +29,11 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthPage = path.startsWith('/login')
   // /s/<token> is the public share page: no account needed to view it.
-  const isPublic = path === '/' || isAuthPage || path.startsWith('/auth') || path.startsWith('/s/')
+  // /api/telegram/webhook is called by Telegram's servers, which carry no
+  // session cookie — redirecting them would silently kill the bot.
+  const isPublic =
+    path === '/' || isAuthPage || path.startsWith('/auth') || path.startsWith('/s/') ||
+    path === '/api/telegram/webhook'
 
   if (!loggedIn && !isPublic) {
     const url = request.nextUrl.clone()

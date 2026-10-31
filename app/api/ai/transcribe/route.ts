@@ -6,6 +6,7 @@ import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
 import { parsePartName, planChunks, spreadDuration, type FilePart } from '@/lib/parts'
 import { tracker } from '@/lib/usage'
+import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
 import { PDFDocument } from 'pdf-lib'
 
 export const maxDuration = 300
@@ -88,7 +89,8 @@ export async function POST(req: Request) {
 async function handle(req: Request) {
   const supabase = await createClient()
   const { data: claims } = await supabase.auth.getClaims()
-  if (!claims?.claims?.sub) return fail('Please log in again.', 401)
+  const userId = claims?.claims?.sub
+  if (!userId) return fail('Please log in again.', 401)
 
   let body: Record<string, unknown>
   try {
@@ -348,7 +350,23 @@ async function handle(req: Request) {
         .from('outputs')
         .update({ content: joinParts(parts2), data: { ...old, parts: parts2, reviewed } })
         .eq('id', out.id)
-      if (doneAll) await supabase.from('files').update({ ai_status: 'done', ai_error: null }).eq('id', fileId)
+      if (doneAll) {
+        // Edge-triggered flip: update only rows NOT already done, so the "your
+        // transcript is ready" notification fires exactly once per file even if
+        // reviews are re-run after a resumed session.
+        const { data: flipped } = await supabase
+          .from('files')
+          .update({ ai_status: 'done', ai_error: null })
+          .eq('id', fileId)
+          .neq('ai_status', 'done')
+          .select('id')
+        if (flipped && flipped.length > 0) {
+          const title = file.name.replace(/\.[^.]+$/, '').replace(/[_#]+/g, ' ').trim() || 'Lecture'
+          const url = outputUrl(siteOrigin(req), file.subject_id, fileId, 'transcript')
+          const text = joinParts(parts2)
+          after(() => notifyReady(supabase, userId, 'transcript', { title, url, file: { text } }))
+        }
+      }
       return NextResponse.json({ ok: true, index: i, complete: doneAll })
     } catch (e) {
       if (e instanceof GeminiError && e.code === 'quota') refund()
