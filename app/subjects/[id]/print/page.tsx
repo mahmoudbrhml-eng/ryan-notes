@@ -5,12 +5,15 @@ import PagedDoc from '@/components/PagedDoc'
 import AutoUpgrade from '@/components/AutoUpgrade'
 import { getI18n } from '@/lib/i18n'
 import { generate } from '@/lib/gemini'
+import { sampleText } from '@/lib/clean'
+import { minDetailedBooklet } from '@/lib/prompts'
+import { fileTopic } from '@/lib/pdfdoc'
 import { createClient } from '@/lib/supabase/server'
 
-// Same bar as the summary API: a detailed booklet must be substantial relative
-// to its source. Older stored summaries (written before the dense pipeline)
-// sit far below it — those get auto-upgraded when the user opens the PDF.
-const minDetailed = (srcLen: number) => Math.max(6000, Math.min(30000, Math.floor(srcLen * 0.4)))
+// Same bar as the summary API (shared minDetailedBooklet): a detailed booklet
+// must be substantial relative to its source. Older stored summaries (written
+// before the dense pipeline) sit far below it — those get auto-upgraded when
+// the user opens the PDF.
 
 // The contents page is always in English: keep only the English part of each heading.
 function englishOnly(s: string) {
@@ -46,11 +49,14 @@ const cleanTopic = (s: string) =>
     .trim()
     .slice(0, 90)
 
-// The topic of the notes is read from the notes themselves: the first main
-// heading (then the first sub-heading). Only when the content has no structure
-// at all does the AI name it; the file name is the last resort.
+// The topic of the notes: the first main heading that is not one of the fixed
+// booklet sections ("The lecture in one minute", "Must remember", …) — those
+// describe the format, never the lecture. Sub-headings come second. Only when
+// the content has no structure at all does the AI name it; the file name is
+// handled separately by fileTopic (imported, leads the chain).
+const BOILER = /^(the lecture in one minute|must remember|high[- ]yield for the exam|quick recap|المحاضرة في دقيقة|الخلاصة|أهم النقاط)/i
 function topicFrom(md: string): string {
-  const heads = tocOf(md)
+  const heads = tocOf(md).filter((h) => !BOILER.test(h.text))
   for (const lv of [2, 3]) {
     const h = heads.find((x) => x.level === lv)
     if (h) {
@@ -64,7 +70,7 @@ function topicFrom(md: string): string {
 async function aiTopic(md: string): Promise<string> {
   try {
     const r = await generate(
-      [{ text: `Give ONE short title (max 8 words) naming the main topic of these study notes. Reply with the title only, in the same language as the notes.\n\n${md.slice(0, 5000)}` }],
+      [{ text: `Give ONE short title (max 8 words) naming the main topic of these study notes. Sampled from the beginning, middle and end — the title must cover the WHOLE notes, not just the first section. Reply with the title only, in the same language as the notes.\n\n${sampleText(md, 12000)}` }],
       { light: true, max: 60, budgetMs: 15000 },
     )
     return cleanTopic(r.split('\n').filter((x) => x.trim())[0] ?? '')
@@ -108,12 +114,15 @@ export default async function PrintPage({
       const { data: tr } = await supabase
         .from('outputs').select('content').eq('file_id', sp.f).eq('kind', 'transcript').maybeSingle()
       const trLen = tr?.content?.length ?? 0
-      if (trLen > 3000 && (data.summary_kind ?? null) !== 'short' && data.content.length < minDetailed(trLen)) {
+      if (trLen > 3000 && (data.summary_kind ?? null) !== 'short' && data.content.length < minDetailedBooklet(trLen)) {
         upgradeFileId = sp.f
       }
     }
     const content = data?.content ?? ''
-    title = topicFrom(content) || (content ? await aiTopic(content) : '') || (file?.name ?? '').replace(/\.[^.]+$/, '') || 'Notes'
+    // Cover topic priority: the file name the user chose (it describes the
+    // WHOLE lecture) → a real heading from the notes → the AI topic sampled
+    // across the whole lecture → the raw name. Never just the first section.
+    title = fileTopic(file?.name) || topicFrom(content) || (content ? await aiTopic(content) : '') || (file?.name ?? '').replace(/\.[^.]+$/, '') || 'Notes'
   }
   if (!subject || !out?.content) notFound()
 
@@ -122,14 +131,12 @@ export default async function PrintPage({
   const kindLabel = kind === 'merged' ? 'Combined notes' : kind === 'summary' ? 'Summary' : 'Lecture notes'
 
   let n2 = 0
-  let n3 = 0
-  const items = tocOf(out.content).map((h) => {
-    if (h.level === 2) {
-      n3 = 0
-      return { ...h, num: `${++n2}.`, label: englishOnly(h.text) }
-    }
-    return { ...h, num: `${n2}.${++n3}`, label: englishOnly(h.text) }
-  })
+  // Main headings only: a contents page that also lists every sub-heading runs
+  // pages long and buries the real structure. (Ids stay positional over
+  // h2+h3, so the links still land exactly on the right heading.)
+  const items = tocOf(out.content)
+    .filter((h) => h.level === 2)
+    .map((h) => ({ ...h, num: `${++n2}.`, label: englishOnly(h.text) }))
 
   return (
     // dir must stay LTR on this wrapper: a RTL ancestor around Paged.js's render

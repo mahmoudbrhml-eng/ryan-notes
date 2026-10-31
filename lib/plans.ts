@@ -7,9 +7,9 @@ export type Plan = 'free' | 'plus' | 'pro' | 'max'
 export const PLAN_ORDER: Plan[] = ['free', 'plus', 'pro', 'max']
 
 export const PLANS: Record<Plan, { callsPerDay: number; tokensPerDay: number; uploadMB: number }> = {
-  free: { callsPerDay: 5, tokensPerDay: 50_000, uploadMB: 20 },
-  plus: { callsPerDay: 20, tokensPerDay: 200_000, uploadMB: 100 },
-  pro: { callsPerDay: 100, tokensPerDay: 1_000_000, uploadMB: 500 },
+  free: { callsPerDay: 5, tokensPerDay: 1_000_000, uploadMB: 20 },
+  plus: { callsPerDay: 20, tokensPerDay: 4_000_000, uploadMB: 100 },
+  pro: { callsPerDay: 100, tokensPerDay: 10_000_000, uploadMB: 500 },
   max: { callsPerDay: Infinity, tokensPerDay: Infinity, uploadMB: 2048 },
 }
 

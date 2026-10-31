@@ -2,10 +2,14 @@
 -- Telegram bot. `ai_usage` becomes ONE ROW PER USER and carries the plan plus
 -- today's usage; the bot reads/writes the very same row, so both surfaces are
 -- always mirrored. Limits (keep in sync with lib/plans.ts):
---   free: 5 calls/day,  50k tokens/day,  20MB upload
---   plus: 20 calls/day, 200k tokens/day, 100MB upload
---   pro:  100 calls/day, 1M tokens/day,  500MB upload
---   max:  unlimited calls/tokens,        2GB upload
+--   free: 5 calls/day,  1M tokens/day,    20MB upload
+--   plus: 20 calls/day, 4M tokens/day,   100MB upload
+--   pro:  100 calls/day, 10M tokens/day, 500MB upload
+--   max:  unlimited calls/tokens,         2GB upload
+--
+-- Raised token budgets (free 50K→1M, plus 200K→4M, pro 1M→10M) are applied
+-- to the live project by sql/10b_token_limits.sql — an idempotent patch that
+-- only replaces the two functions carrying the numbers.
 --
 -- Contract for the Python bot (service-role key):
 --   consume_quota('chat', user_id)  -> jsonb {allowed, plan, reason, ...}   (check + charge ONE call)
@@ -103,7 +107,7 @@ begin
   v_calls_limit := case v_plan
     when 'plus' then 20 when 'pro' then 100 when 'max' then 2147483647 else 5 end;
   v_tokens_limit := case v_plan
-    when 'plus' then 200000 when 'pro' then 1000000 when 'max' then 2147483647 else 50000 end;
+    when 'plus' then 4000000 when 'pro' then 10000000 when 'max' then 2147483647 else 1000000 end;
 
   if v_plan <> 'max' and (rec.call_count + 1 > v_calls_limit or rec.tokens_used >= v_tokens_limit) then
     return jsonb_build_object(
@@ -150,7 +154,7 @@ begin
     return jsonb_build_object(
       'ok', true, 'plan', 'free', 'plan_expires_at', null,
       'calls_used', 0, 'tokens_used', 0,
-      'calls_limit', 5, 'tokens_limit', 50000, 'upload_mb', 20, 'day', current_date);
+      'calls_limit', 5, 'tokens_limit', 1000000, 'upload_mb', 20, 'day', current_date);
   end if;
   select * into rec from public.ai_usage where user_id = uid;
   v_plan := case when rec.plan_expires_at is not null and rec.plan_expires_at < now()
@@ -160,7 +164,7 @@ begin
     'calls_used', case when rec.day = current_date then rec.call_count else 0 end,
     'tokens_used', case when rec.day = current_date then rec.tokens_used else 0 end,
     'calls_limit', case v_plan when 'plus' then 20 when 'pro' then 100 when 'max' then null else 5 end,
-    'tokens_limit', case v_plan when 'plus' then 200000 when 'pro' then 1000000 when 'max' then null else 50000 end,
+    'tokens_limit', case v_plan when 'plus' then 4000000 when 'pro' then 10000000 when 'max' then null else 1000000 end,
     'upload_mb', case v_plan when 'plus' then 100 when 'pro' then 500 when 'max' then 2048 else 20 end,
     'day', current_date);
 end $$;

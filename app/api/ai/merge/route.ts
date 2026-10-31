@@ -1,8 +1,9 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
-import { mergePrompt, quizPrompt, summaryPrompt, continueSummaryPrompt, type NotesLang, type QuizLevel } from '@/lib/prompts'
+import { mergePrompt, quizPrompt, summaryPrompt, continueSummaryPrompt, minDetailedBooklet, type NotesLang, type QuizLevel } from '@/lib/prompts'
 import { cleanMarkdown, sampleText } from '@/lib/clean'
+import type { CallInfo } from '@/lib/gemini'
 import { matchPartGroup } from '@/lib/parts'
 import { tracker } from '@/lib/usage'
 import { guardQuota } from '@/lib/quota'
@@ -38,8 +39,9 @@ function parseQuiz(raw: string): Q[] {
 }
 
 // One detailed pass plus continuation passes — the merged transcript can be
-// long, so the same density guarantee as the per-source summary applies.
-const minDetailed = (srcLen: number) => Math.max(6000, Math.min(30000, Math.floor(srcLen * 0.4)))
+// long, so the same density guarantee as the per-source summary applies
+// (shared minDetailedBooklet, token-capped passes force one extra continue,
+// and a time guard keeps the whole chain inside the function cap).
 
 export async function POST(req: Request) {
   try {
@@ -132,10 +134,17 @@ export async function POST(req: Request) {
         if (length === 'short') {
           out = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'short', custom) }], { max: 8000, track: mergeTrk }))
         } else {
-          let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: mergeTrk }))
-          for (let pass = 0; pass < 2 && t.length < minDetailed(joined.length); pass++) {
-            const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000, track: mergeTrk })
+          const t0 = Date.now()
+          const left = () => 300000 - (Date.now() - t0)
+          let cutOff = 0
+          const trk = (i: CallInfo) => { if ((i.outTokens ?? 0) >= 22_000) cutOff++; mergeTrk?.(i) }
+          let t = cleanMarkdown(await generate([{ text: summaryPrompt(lang, joined, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: trk }))
+          for (let pass = 0; pass < 3; pass++) {
+            const thin = t.length < minDetailedBooklet(joined.length)
+            if ((!thin && !cutOff) || left() < 90000) break
+            const more = await generate([{ text: continueSummaryPrompt(lang, t, joined, custom) }], { max: 24000, budgetMs: 80000, track: trk })
             const clean = cleanMarkdown(more)
+            cutOff = 0
             if (clean.length < 400) break
             t = `${t}\n\n${clean}`
           }

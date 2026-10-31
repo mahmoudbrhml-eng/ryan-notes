@@ -1,8 +1,9 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { GeminiError, generate } from '@/lib/gemini'
-import { summaryPrompt, continueSummaryPrompt, type NotesLang } from '@/lib/prompts'
+import { summaryPrompt, continueSummaryPrompt, minDetailedBooklet, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown, sliceText } from '@/lib/clean'
+import type { CallInfo } from '@/lib/gemini'
 import { tracker } from '@/lib/usage'
 import { guardQuota } from '@/lib/quota'
 import { notifyReady, outputUrl, siteOrigin } from '@/lib/telegram'
@@ -12,22 +13,30 @@ export const maxDuration = 300
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const fail = (error: string, status = 400, code = 'other') => NextResponse.json({ error, code }, { status })
 
-// A detailed booklet must be substantial relative to its source. Lighter models
-// love to compress more than asked, so after the first pass we measure and, if
-// the document came back thin, ask the model to continue with the missing
-// sections (up to 2 extra passes). This is what keeps a big lecture from
-// turning into a 3-page digest.
-const minDetailed = (srcLen: number) => Math.max(6000, Math.min(30000, Math.floor(srcLen * 0.4)))
+// A detailed booklet must be substantial relative to its source: the pipeline
+// keeps appending "continue" passes until the booklet meets the shared bar
+// (minDetailedBooklet) — up to 3 extra passes, time permitting. This is what
+// keeps a big lecture from turning into a 3-page digest of its first pages.
 
-async function writeDetailed(lang: NotesLang, src: string, custom?: string, track?: (i: { keyIndex: number; model: string; ok: boolean; status: number | null; inTokens: number | null; outTokens: number | null; ms: number }) => void): Promise<string> {
+async function writeDetailed(lang: NotesLang, src: string, custom?: string, track?: (i: CallInfo) => void): Promise<string> {
   const started = Date.now()
   const left = () => 300000 - (Date.now() - started) // stay under the function cap
-  let text = await generate([{ text: summaryPrompt(lang, src, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track })
+  // A pass that returns close to its output-token cap was CUT OFF mid-lecture,
+  // not finished — the char count cannot tell (30K tokens of Arabic is plenty
+  // of chars), so token-capped passes force one extra continue each, even when
+  // the booklet is already above the length bar.
+  let cutOff = 0
+  const trk = track
+    ? (i: CallInfo) => { if ((i.outTokens ?? 0) >= 22_000) cutOff++; track(i) }
+    : undefined
+  let text = await generate([{ text: summaryPrompt(lang, src, 'detailed', custom) }], { max: 30000, budgetMs: 120000, track: trk })
   text = cleanMarkdown(text)
-  for (let pass = 0; pass < 2 && text.length < minDetailed(src.length); pass++) {
-    if (left() < 90000) break // not enough time for another safe pass
-    const more = await generate([{ text: continueSummaryPrompt(lang, text, src, custom) }], { max: 24000, budgetMs: 80000, track })
+  for (let pass = 0; pass < 3; pass++) {
+    const thin = text.length < minDetailedBooklet(src.length)
+    if ((!thin && !cutOff) || left() < 90000) break // done, or not enough time for another safe pass
+    const more = await generate([{ text: continueSummaryPrompt(lang, text, src, custom) }], { max: 24000, budgetMs: 80000, track: trk })
     const clean = cleanMarkdown(more)
+    cutOff = 0 // consumed: one forced pass per capping event
     if (clean.length < 400) break // nothing meaningful came back: stop here
     text = `${text}\n\n${clean}`
   }

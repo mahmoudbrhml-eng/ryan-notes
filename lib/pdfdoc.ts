@@ -100,8 +100,12 @@ export const cleanTopic = (s: string) =>
     .trim()
     .slice(0, 90)
 
+// Fixed sections every generated booklet starts/ends with — they describe the
+// format, not the lecture, so they never make a good cover topic.
+const BOILER = /^(the lecture in one minute|must remember|high[- ]yield for the exam|quick recap|المحاضرة في دقيقة|الخلاصة|أهم النقاط)/i
+
 export function topicFrom(md: string): string {
-  const heads = tocOf(md)
+  const heads = tocOf(md).filter((h) => !BOILER.test(h.text))
   for (const lv of [2, 3]) {
     const h = heads.find((x) => x.level === lv)
     if (h) {
@@ -110,6 +114,20 @@ export function topicFrom(md: string): string {
     }
   }
   return ''
+}
+
+// The user's own file name is the best description of the WHOLE lecture —
+// better than any first-section heading pulled out of the notes. Rejected when
+// it is just a recorder code ("AUD 1234", "New Recording 5") or mostly digits:
+// those fall through to the content-derived topic instead.
+export function fileTopic(fileName: string | null | undefined): string {
+  if (!fileName) return ''
+  const base = cleanTopic(fileName.replace(/\.[^.]+$/, ''))
+  if (base.length < 4) return ''
+  const digits = (base.match(/\d/g) ?? []).length
+  if (digits / base.length > 0.4) return ''
+  if (/^((?:new\s+)?rec(?:ording)?|aud(?:io)?|img|vid(?:eo)?|voice(?:\s*memo)?|file|doc|scan|screenshot|تسجيل|صوت|ملف|محاضرة)\s*[-_.]?\s*\d*$/i.test(base)) return ''
+  return base
 }
 
 // The contents page is always in English: keep only the English part of each heading.
@@ -121,14 +139,12 @@ export function englishOnly(s: string) {
 export type TocItem = { id: string; num: string; label: string; level: number }
 export function buildTocItems(md: string): TocItem[] {
   let n2 = 0
-  let n3 = 0
-  return tocOf(md).map((h) => {
-    if (h.level === 2) {
-      n3 = 0
-      return { id: h.id, num: `${++n2}.`, label: englishOnly(h.text), level: h.level }
-    }
-    return { id: h.id, num: `${n2}.${++n3}`, label: englishOnly(h.text), level: h.level }
-  })
+  // Main headings only: a contents page that also lists every ### sub-heading
+  // runs pages long and buries the lecture's actual structure. (The ids stay
+  // positional over h2+h3, so the links still land exactly.)
+  return tocOf(md)
+    .filter((h) => h.level === 2)
+    .map((h) => ({ id: h.id, num: `${++n2}.`, label: englishOnly(h.text), level: h.level }))
 }
 
 const esc = (s: string) =>

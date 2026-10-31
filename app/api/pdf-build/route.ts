@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { PRINT_CSS } from '@/lib/printCss'
 import {
-  buildDocHtml, buildTocItems, cleanTopic, topicFrom, safePdfName, markdownToHtml, FALLBACK_CSS,
+  buildDocHtml, buildTocItems, fileTopic, topicFrom, safePdfName, markdownToHtml, FALLBACK_CSS,
 } from '@/lib/pdfdoc'
 import { fixArabicTextLayer } from '@/lib/pdffix'
 import { createClient } from '@/lib/supabase/server'
@@ -102,7 +102,10 @@ export async function POST(req: Request) {
     if (!content) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (content.length > 600000) return NextResponse.json({ error: 'too large' }, { status: 413 })
 
-    title = topicFrom(content) || cleanTopic(fileName.replace(/\.[^.]+$/, '')) || 'Notes'
+    // Cover topic: the user's own file name names the WHOLE lecture; a heading
+    // from the notes can only name its first section. Junk recorder names are
+    // rejected inside fileTopic and fall through to the content-derived topic.
+    title = fileTopic(fileName) || topicFrom(content) || 'Notes'
     const rtl = lang !== 'en'
     const kindLabel = kind === 'merged' ? 'Combined notes' : kind === 'summary' ? 'Summary' : 'Lecture notes'
     const bodyHtml = markdownToHtml(content, rtl ? 'rtl' : 'ltr')

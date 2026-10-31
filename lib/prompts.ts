@@ -77,6 +77,13 @@ ${written.slice(-24000)}
 --- THE FULL SOURCE (write what is still missing from here):
 ${src.slice(0, 300000)}`
 
+// A detailed booklet must be substantial relative to its source. Lighter models
+// love to compress more than asked, so the summary pipeline keeps appending
+// "continue" passes until this bar is met (or the function runs out of time).
+// The summary API and the print page's auto-upgrade check share this number —
+// change it in one place only.
+export const minDetailedBooklet = (srcLen: number) => Math.max(6000, Math.min(60_000, Math.floor(srcLen * 0.4)))
+
 export type QuizLevel = 'easy' | 'medium' | 'hard'
 
 export const quizPrompt = (lang: NotesLang, md: string, count: number, level: QuizLevel, custom?: string) =>
