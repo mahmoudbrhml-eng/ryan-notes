@@ -4,6 +4,7 @@ import { GeminiError, apiKeys, generate, uploadFile, type GeminiPart } from '@/l
 import { SYS, reviewPrompt, type NotesLang } from '@/lib/prompts'
 import { cleanMarkdown } from '@/lib/clean'
 import { kindOf, mimeFor } from '@/lib/filekind'
+import { extractOfficeText, isOffice } from '@/lib/office'
 import { parsePartName, planChunks, spreadDuration, type FilePart } from '@/lib/parts'
 import { tracker } from '@/lib/usage'
 import { guardTranscribeQuota } from '@/lib/quota'
@@ -116,8 +117,13 @@ async function handle(req: Request) {
     .single()
   if (!file) return fail('File not found', 404)
 
-  const kind = kindOf(file.name, file.mime)
-  if (kind === 'unsupported') return fail('This file type is not supported yet. Export DOCX/PPTX to PDF first.', 415)
+  // Modern Word/PowerPoint uploads join the text pipeline: their text is
+  // extracted server-side once per request and everything else (chunking,
+  // metering, review, summary/quiz/mindmap downstream) works unchanged.
+  const office = isOffice(file.name, file.mime)
+  const kind = office ? 'text' : kindOf(file.name, file.mime)
+  if (kind === 'unsupported')
+    return fail('This file type is not supported yet. Supported: PDF, images, audio/video, text, DOCX and PPTX.', 415)
 
   // Audio/video tokens are enormous and meaningless to students: media
   // transcription is metered in monthly HOURS instead, so its calls are kept
@@ -148,6 +154,15 @@ async function handle(req: Request) {
     return blob
   }
   const download = () => downloadPart(file.storage_path)
+  const officeText = office
+    ? async () => {
+        const buf = await (await download()).arrayBuffer()
+        const txt = await extractOfficeText(file.name, file.mime, buf)
+        if (!txt || txt.trim().length < 20)
+          throw new Error('This file looks empty or is a scanned image — export it to PDF and try again.')
+        return txt
+      }
+    : null
   const setError = async (msg: string) => {
     await supabase.from('files').update({ ai_status: 'error', ai_error: msg.slice(0, 300) }).eq('id', fileId)
   }
@@ -202,7 +217,8 @@ async function handle(req: Request) {
       let durs: number[] | undefined
       let pagesArr: number[] | undefined
       const youtube = file.mime === 'video/youtube' && !!file.source_url
-      if (kind === 'text') total = splitText(await (await download()).text()).length
+      if (officeText) total = splitText(await officeText()).length
+      else if (kind === 'text') total = splitText(await (await download()).text()).length
       else if (kind === 'media') {
         if (youtube && !dur) {
           try {
@@ -395,7 +411,7 @@ async function handle(req: Request) {
     let gemRec: GemRec | null = old.gemini
 
     if (kind === 'text') {
-      const chunks = splitText(await (await download()).text())
+      const chunks = splitText(officeText ? await officeText() : await (await download()).text())
       const ask = `هذا الجزء رقم ${i + 1} من ${chunks.length} من تفريغ المحاضرة.${
         prev ? '\nآخر ما كُتب في الجزء السابق:\n' + prev + '\nكمّل مباشرة دون تكرار.' : ''
       }\n\nنص التفريغ:\n${chunks[i]}`

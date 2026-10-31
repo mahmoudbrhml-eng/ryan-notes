@@ -127,7 +127,7 @@ export default function FileAI({
                 <option value="fa">{t.langFa}</option>
               </select>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => run(false)}>
-                {kind === 'doc' || kind === 'text' ? t.makeNotes : t.transcribe}
+                {kind === 'doc' || kind === 'text' || kind === 'office' ? t.makeNotes : t.transcribe}
               </button>
             </>
           )}

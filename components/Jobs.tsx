@@ -7,13 +7,14 @@ import { createClient } from '@/lib/supabase/client'
 import { ApiError, mediaDuration, postJson } from '@/lib/client-api'
 import Icon from './Icon'
 import type { Dict } from '@/lib/dict'
+import type { FileKind } from '@/lib/filekind'
 
 type Lang = 'ar' | 'en' | 'fa'
 export type JobFile = {
   id: string
   name: string
   path: string
-  kind: 'media' | 'text' | 'doc' | 'unsupported'
+  kind: FileKind
   mime: string
   url: string
   isLink: boolean

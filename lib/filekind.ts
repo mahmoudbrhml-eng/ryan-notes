@@ -1,4 +1,4 @@
-export type FileKind = 'media' | 'text' | 'doc' | 'unsupported'
+export type FileKind = 'media' | 'text' | 'doc' | 'office' | 'unsupported'
 
 export function kindOf(name: string, mime: string | null): FileKind {
   const m = (mime ?? '').toLowerCase()
@@ -6,6 +6,14 @@ export function kindOf(name: string, mime: string | null): FileKind {
   if (/^(audio|video)\//.test(m) || /\.(mp3|m4a|wav|ogg|aac|flac|mp4|webm|mov|mkv)$/.test(n)) return 'media'
   if (/^text\//.test(m) || /\.(txt|md)$/.test(n)) return 'text'
   if (m === 'application/pdf' || /\.pdf$/.test(n) || /^image\//.test(m)) return 'doc'
+  // Modern Word/PowerPoint files: the AI transcriber extracts their text
+  // server-side (lib/office.ts). Legacy .doc/.ppt stay unsupported.
+  if (
+    /\.(docx|pptx)$/.test(n) ||
+    m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  )
+    return 'office'
   return 'unsupported'
 }
 
