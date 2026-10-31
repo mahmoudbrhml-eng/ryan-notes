@@ -135,7 +135,10 @@ function collectPlaceholders(doc: Document): PhMap {
 const px1 = (emu: string | null | undefined) => (emu ? parseInt(emu, 10) / EMU_PX : 0)
 
 function ownBox(sp: Element): PhBox | null {
-  const xfrm = firstEl(sp, 'a:xfrm')
+  // p:sp shapes use a:xfrm (inside spPr) but p:graphicFrame — tables and
+  // charts — carries its position in a p:xfrm child. Missing p:xfrm made
+  // every table in a deck silently disappear.
+  const xfrm = firstEl(sp, 'a:xfrm') ?? firstEl(sp, 'p:xfrm')
   if (!xfrm) return null
   const off = firstEl(xfrm, 'a:off')
   const ext = firstEl(xfrm, 'a:ext')
