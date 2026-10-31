@@ -3,7 +3,7 @@ import AppShell from '@/components/AppShell'
 import Icon from '@/components/Icon'
 import { getI18n } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase/server'
-import { getPlanStatus, PLANS, PLAN_ORDER, planChip, fmtMB } from '@/lib/plans'
+import { getPlanStatus, PLANS, PLAN_ORDER, planChip, fmtMB, fmtTokens } from '@/lib/plans'
 
 // "My plan" — current status + the Free/Plus/Pro/Max comparison. The limits
 // themselves live in one place (sql/10_plans.sql) and are enforced there, so
@@ -106,7 +106,7 @@ export default async function PlanPage() {
                 <td className="py-2.5 font-medium">{t.plan.tokensRow}</td>
                 {PLAN_ORDER.map((p) => (
                   <td key={p} dir="ltr" className={`px-2 py-2.5 text-center font-semibold ${p === plan ? 'bg-brand-soft/40 rounded' : ''}`}>
-                    {un(PLANS[p].tokensPerDay)}
+                    {Number.isFinite(PLANS[p].tokensPerDay) ? fmtTokens(PLANS[p].tokensPerDay) : t.plan.unlimited}
                   </td>
                 ))}
               </tr>
