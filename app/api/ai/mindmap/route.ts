@@ -69,11 +69,18 @@ export async function POST(req: Request) {
 
     const { data: existing } = await supabase
       .from('outputs').select('id').eq('file_id', fileId).eq('kind', 'mindmap').maybeSingle()
-    if (existing) await supabase.from('outputs').update({ data: tree, lang: custom ? 'custom' : lang }).eq('id', existing.id)
-    else
-      await supabase.from('outputs').insert({
-        subject_id: tr.subject_id, file_id: fileId, kind: 'mindmap', title: tr.title, lang: custom ? 'custom' : lang, content: '', data: tree,
-      })
+    const row = {
+      subject_id: tr.subject_id, file_id: fileId, kind: 'mindmap', title: tr.title, lang: custom ? 'custom' : lang, content: '', data: tree,
+    }
+    const { error: upErr } = existing
+      ? await supabase.from('outputs').update({ data: tree, lang: custom ? 'custom' : lang }).eq('id', existing.id)
+      : await supabase.from('outputs').insert(row)
+    if (upErr) {
+      // Never swallow storage errors: the user paid a call for this tree.
+      console.error('[mindmap] upsert', upErr.message)
+      after(async () => { try { await supabase.rpc('refund_usage', { p_feature: 'mindmap' }) } catch {} })
+      return fail('Could not save the mind map. Try again in a moment.', 503, 'save')
+    }
 
     return NextResponse.json({ ok: true, nodes: tree.c.length })
   } catch (e) {
