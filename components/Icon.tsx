@@ -35,6 +35,15 @@ const P = {
   play: 'M6 4l14 8-14 8z',
   speaker: 'M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
   stop: 'M6 6h12v12H6z',
+  wrench: 'M14.7 6.3a4 4 0 0 0-5.6 4.9L3 17.3V21h3.7l6.1-6.1a4 4 0 0 0 4.9-5.6l-2.8 2.8-2.5-2.5z',
+  merge: 'M5 4v4c0 4 3 6 7 6h7m0 0-3-3m3 3-3 3M5 20v-1',
+  split: 'M10 3H5v18h5M14 3h5v18h-5M8 12H2m20 0h-6',
+  filex: 'M6 3h8l4 4v14H6zM14 3v4h4M9.5 12.5l5 5m0-5-5 5',
+  image: 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M15.5 8.5h.01',
+  doc: 'M6 3h8l4 4v14H6zM14 3v4h4M8 12l1.7 6 2.3-4.5L14.3 18l1.7-6',
+  slides: 'M6 3h8l4 4v14H6zM14 3v4h4M10.5 11.5l4.5 2.5-4.5 2.5z',
+  chevU: 'M6 15l6-6 6 6',
+  chevD: 'M6 9l6 6 6-6',
 } as const
 
 export type IconName = keyof typeof P

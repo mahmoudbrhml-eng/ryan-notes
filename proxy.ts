@@ -7,8 +7,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // /ffmpeg/ is the self-hosted compression engine: plain static files that
-    // must be reachable without a session (the worker loads them directly).
-    '/((?!_next/static|_next/image|favicon.ico|ffmpeg/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // /ffmpeg/ is the self-hosted compression engine and /pdfjs/ the pdf.js
+    // worker: plain static files that must be reachable without a session
+    // (the worker loads them directly).
+    '/((?!_next/static|_next/image|favicon.ico|ffmpeg/|pdfjs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

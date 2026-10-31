@@ -42,6 +42,10 @@ export default async function AppShell({
           </h1>
         )}
         {!title && <div className="flex-1" />}
+        <Link href="/tools" className="btn btn-ghost btn-sm" title={t.pdft.short} aria-label={t.pdft.short}>
+          <Icon name="wrench" className="h-4 w-4" />
+          <span className="hidden md:inline">{t.pdft.short}</span>
+        </Link>
         <NewSubject label={t.home.newSubject} ph={t.home.namePh} create={t.home.create} cancel={t.home.cancel} />
         <LangToggle lang={lang} label={t.lang} />
         <ThemeToggle theme={theme} labels={{ system: t.theme.system, light: t.theme.light, dark: t.theme.dark }} />
