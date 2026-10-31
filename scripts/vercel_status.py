@@ -12,7 +12,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOKEN_FILE = os.path.join(HERE, ".env-tokens")
-TEAM = "team_JhCN-ogG"
+TEAM = "team_o8kAx4heEKQNsuI1ti1EhpN8"
 
 
 def load_token():

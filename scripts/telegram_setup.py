@@ -21,7 +21,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOKEN_FILE = os.path.join(HERE, ".env-tokens")
-TEAM = "team_JhCN-ogG"
+TEAM = "team_o8kAx4heEKQNsuI1ti1EhpN8"
 PROJECT = "prj_cDwYcL1BNecbc8TJpqmZ6LeRBD51"
 WEBHOOK_URL = "https://ryan-notes-zeta.vercel.app/api/telegram/webhook"
 
