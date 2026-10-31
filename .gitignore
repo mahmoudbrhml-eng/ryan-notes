@@ -13,3 +13,6 @@ testfiles/
 download/
 skills/
 /pdfjs
+# e2e helpers that embed the test-account password - local only
+scripts/e2e_office.py
+scripts/probe_cookie.mjs
