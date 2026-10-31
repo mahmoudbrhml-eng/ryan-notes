@@ -6,3 +6,10 @@ node_modules/
 .DS_Store
 next-env.d.ts
 tsconfig.tsbuildinfo
+bun.lock
+# sandbox artifacts - never publish
+upload/
+testfiles/
+download/
+skills/
+/pdfjs
